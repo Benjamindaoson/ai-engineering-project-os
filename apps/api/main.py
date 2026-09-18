@@ -16,6 +16,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from packages.database import (
     init_db, get_session, async_session,
@@ -24,6 +25,7 @@ from packages.database import (
     ExecutionRepository, VerificationRepository,
     EvidenceRepository, VersionRepository, InterviewRepository,
 )
+from packages.database.models import InterviewQuestion
 from packages.contracts.models import TaskStatus
 from services.project_auditor import ProjectAuditor
 from services.upgrade_planner import UpgradePlanner
@@ -113,33 +115,6 @@ async def get_db() -> AsyncSession:
 async def health_check():
     """Health check"""
     return {"status": "healthy", "version": "0.2.0"}
-
-
-@app.get("/test/planner")
-async def test_planner():
-    """Test the planner directly"""
-    try:
-        result = planner.plan(
-            project_facts={
-                "main_language": ["Python"],
-                "frameworks": ["FastAPI"],
-                "database": ["SQLite"],
-                "project_type": "rag",
-            },
-            maturity_assessment={
-                "overall_level": "idea",
-                "dimension_scores": {},
-            },
-            gaps=[
-                {"id": "1", "project_id": "test", "dimension": "testing", "description": "No tests", "current_state": "None", "target_state": "Tests exist", "priority": "critical"},
-            ],
-            user_goals=[],
-        )
-        return {"success": True, "tasks": len(result.get("recommended_tasks", []))}
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return {"success": False, "error": str(e)}
 
 
 # ---- Projects ----
@@ -736,37 +711,76 @@ async def submit_interview_answer(
     if not session:
         raise HTTPException(status_code=404, detail="Interview session not found")
 
-    # Save the answer
-    answer = await interview_repo.create_answer({
+    # Get the question
+    result = await db.execute(
+        select(InterviewQuestion).where(InterviewQuestion.id == answer_data.question_id)
+    )
+    question = result.scalar_one_or_none()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Create a simple answer record for now
+    answer_record = await interview_repo.create_answer({
         "session_id": session_id,
         "question_id": answer_data.question_id,
         "answer": answer_data.answer,
     })
 
-    # Generate follow-up if any
+    # Evaluate the answer
     engine = InterviewEngine()
-    follow_up = engine.generate_follow_up(
-        question_id=answer_data.question_id,
-        user_answer=answer_data.answer,
-        session_id=session_id,
-    )
+    evaluation = engine.evaluate_answer(question, answer_data.answer)
+
+    # Create assessment
+    assessment = await interview_repo.create_assessment({
+        "session_id": session_id,
+        "question_id": answer_data.question_id,
+        "answer_id": answer_record.id,
+        "quality": evaluation.get("quality", "basic"),
+        "reasoning": evaluation.get("suggestion"),
+        "knowledge_gap": evaluation.get("gap_type") if evaluation.get("quality") in ["insufficient", "basic"] else None,
+        "suggestion": evaluation.get("suggestion"),
+        "has_example": evaluation.get("has_example", False),
+        "has_reason": evaluation.get("has_reason", False),
+        "has_quantitative": evaluation.get("has_quantitative", False),
+    })
 
     result = {
-        "answer_id": answer.id,
+        "answer_id": answer_record.id,
+        "assessment": {
+            "quality": evaluation.get("quality"),
+            "suggestion": evaluation.get("suggestion"),
+        },
         "submitted": True,
     }
 
-    if follow_up:
-        # Save follow-up question
-        new_q = await interview_repo.create_question({
-            "session_id": session_id,
-            "question": follow_up.question,
-            "context": follow_up.context,
-            "follow_ups": follow_up.follow_ups,
-            "gap_type": follow_up.gap_type,
-            "parent_question_id": answer_data.question_id,
-        })
-        result["next_question"] = new_q.to_dict()
+    # Generate follow-up if needed (based on quality)
+    if evaluation.get("quality") in ["insufficient", "basic"]:
+        follow_up_text = engine.generate_follow_up(question, answer_data.answer)
+        if follow_up_text:
+            # Save follow-up as a new question
+            new_q = await interview_repo.create_question({
+                "session_id": session_id,
+                "question": follow_up_text,
+                "context": f"追问: {question.question[:50]}...",
+                "follow_ups": [],
+                "gap_type": question.gap_type,
+                "parent_question_id": answer_data.question_id,
+            })
+            result["next_question"] = new_q.to_dict()
+
+            # Create gap if assessment indicates deficiency
+            if evaluation.get("quality") == "insufficient":
+                gap = await interview_repo.create_interview_gap({
+                    "session_id": session_id,
+                    "project_id": session.project_id,
+                    "question_id": answer_data.question_id,
+                    "gap_type": question.gap_type or "knowledge",
+                    "description": f"回答不完整: {question.question[:100]}",
+                    "severity": "high",
+                    "recommendation": evaluation.get("suggestion"),
+                })
+                result["gap_created"] = True
+                result["gap_id"] = gap.id
 
     return result
 

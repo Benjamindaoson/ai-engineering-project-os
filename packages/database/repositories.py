@@ -506,6 +506,7 @@ class InterviewRepository:
             context=question_data.get("context", ""),
             follow_ups=question_data.get("follow_ups", []),
             gap_type=question_data.get("gap_type"),
+            parent_question_id=question_data.get("parent_question_id"),
         )
         self.session.add(question)
         await self.session.commit()
@@ -521,6 +522,63 @@ class InterviewRepository:
         )
         await self.session.commit()
 
+    async def create_answer(self, answer_data: Dict[str, Any]):
+        """Create a new interview answer"""
+        from packages.database.models import InterviewAnswer
+        answer = InterviewAnswer(
+            id=str(uuid.uuid4()),
+            session_id=answer_data["session_id"],
+            question_id=answer_data["question_id"],
+            answer=answer_data["answer"],
+        )
+        self.session.add(answer)
+        await self.session.commit()
+        await self.session.refresh(answer)
+        return answer
+
+    async def create_assessment(self, assessment_data: Dict[str, Any]):
+        """Create a new interview assessment"""
+        from packages.database.models import InterviewAssessment
+        assessment = InterviewAssessment(
+            id=str(uuid.uuid4()),
+            session_id=assessment_data["session_id"],
+            question_id=assessment_data["question_id"],
+            answer_id=assessment_data["answer_id"],
+            quality=assessment_data["quality"],
+            reasoning=assessment_data.get("reasoning"),
+            knowledge_gap=assessment_data.get("knowledge_gap"),
+            engineering_gap=assessment_data.get("engineering_gap"),
+            evidence_gap=assessment_data.get("evidence_gap"),
+            experiment_gap=assessment_data.get("experiment_gap"),
+            suggestion=assessment_data.get("suggestion"),
+            has_example=assessment_data.get("has_example", False),
+            has_reason=assessment_data.get("has_reason", False),
+            has_quantitative=assessment_data.get("has_quantitative", False),
+        )
+        self.session.add(assessment)
+        await self.session.commit()
+        await self.session.refresh(assessment)
+        return assessment
+
+    async def create_interview_gap(self, gap_data: Dict[str, Any]):
+        """Create a new interview gap"""
+        from packages.database.models import InterviewGap
+        gap = InterviewGap(
+            id=str(uuid.uuid4()),
+            session_id=gap_data["session_id"],
+            project_id=gap_data["project_id"],
+            question_id=gap_data.get("question_id"),
+            task_id=gap_data.get("task_id"),
+            gap_type=gap_data["gap_type"],
+            description=gap_data["description"],
+            severity=gap_data.get("severity", "medium"),
+            recommendation=gap_data.get("recommendation"),
+        )
+        self.session.add(gap)
+        await self.session.commit()
+        await self.session.refresh(gap)
+        return gap
+
     async def get_session_questions(self, session_id: str) -> List[InterviewQuestion]:
         """Get all questions for a session"""
         result = await self.session.execute(
@@ -532,13 +590,11 @@ class InterviewRepository:
 
     async def get_session_gaps(self, session_id: str) -> List[Dict[str, Any]]:
         """Get gaps identified during interview"""
-        questions = await self.get_session_questions(session_id)
-        gaps = []
-        for q in questions:
-            if q.gap_type and q.user_answer:
-                gaps.append({
-                    "gap_type": q.gap_type,
-                    "description": f"Question about {q.gap_type}: {q.question[:100]}",
-                    "severity": "medium",
-                })
-        return gaps
+        from packages.database.models import InterviewGap
+        result = await self.session.execute(
+            select(InterviewGap)
+            .where(InterviewGap.session_id == session_id)
+            .order_by(InterviewGap.created_at.desc())
+        )
+        gaps = result.scalars().all()
+        return [g.to_dict() for g in gaps]

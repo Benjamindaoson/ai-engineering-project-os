@@ -47,6 +47,7 @@ class Project(Base):
     tasks = relationship("EngineeringTask", back_populates="project", cascade="all, delete-orphan")
     versions = relationship("ProjectVersion", back_populates="project", cascade="all, delete-orphan")
     interviews = relationship("InterviewSession", back_populates="project", cascade="all, delete-orphan")
+    interview_gaps = relationship("InterviewGap", back_populates="project", cascade="all, delete-orphan")
 
 
 class RepositorySnapshot(Base):
@@ -293,18 +294,21 @@ class ProjectVersion(Base):
 class InterviewSession(Base):
     """Interview session"""
     __tablename__ = "interview_sessions"
-    
+
     id = Column(String(36), primary_key=True)
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
     task_id = Column(String(36), nullable=True)
-    
+
     status = Column(String(20), default="in_progress")
     started_at = Column(DateTime, default=datetime.utcnow)
     ended_at = Column(DateTime, nullable=True)
-    
+
     # Relationships
     project = relationship("Project", back_populates="interviews")
     questions = relationship("InterviewQuestion", back_populates="session", cascade="all, delete-orphan")
+    answers = relationship("InterviewAnswer", back_populates="session", cascade="all, delete-orphan")
+    assessments = relationship("InterviewAssessment", back_populates="session", cascade="all, delete-orphan")
+    gaps = relationship("InterviewGap", back_populates="session", cascade="all, delete-orphan")
 
 
 class InterviewQuestion(Base):
@@ -325,6 +329,9 @@ class InterviewQuestion(Base):
 
     # Relationships
     session = relationship("InterviewSession", back_populates="questions")
+    answers = relationship("InterviewAnswer", back_populates="question")
+    assessments = relationship("InterviewAssessment", back_populates="question")
+    gaps = relationship("InterviewGap", back_populates="question")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -339,6 +346,127 @@ class InterviewQuestion(Base):
             "current_follow_up": self.current_follow_up,
             "gap_type": self.gap_type,
             "status": self.status,
+        }
+
+
+class InterviewAnswer(Base):
+    """User's answer to an interview question"""
+    __tablename__ = "interview_answers"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("interview_sessions.id"), nullable=False)
+    question_id = Column(String(36), ForeignKey("interview_questions.id"), nullable=False)
+
+    answer = Column(Text, nullable=False)
+    quality = Column(String(20), nullable=True)  # "insufficient", "basic", "good", "excellent"
+    gap_type = Column(String(50), nullable=True)
+    suggestion = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    session = relationship("InterviewSession", back_populates="answers")
+    question = relationship("InterviewQuestion")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "question_id": self.question_id,
+            "answer": self.answer,
+            "quality": self.quality,
+            "gap_type": self.gap_type,
+            "suggestion": self.suggestion,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class InterviewAssessment(Base):
+    """Assessment of an interview answer"""
+    __tablename__ = "interview_assessments"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("interview_sessions.id"), nullable=False)
+    question_id = Column(String(36), ForeignKey("interview_questions.id"), nullable=False)
+    answer_id = Column(String(36), ForeignKey("interview_answers.id"), nullable=False)
+
+    quality = Column(String(20), nullable=False)  # "insufficient", "basic", "good", "excellent"
+    reasoning = Column(Text, nullable=True)
+    knowledge_gap = Column(Text, nullable=True)
+    engineering_gap = Column(Text, nullable=True)
+    evidence_gap = Column(Text, nullable=True)
+    experiment_gap = Column(Text, nullable=True)
+    suggestion = Column(Text, nullable=True)
+
+    has_example = Column(Boolean, default=False)
+    has_reason = Column(Boolean, default=False)
+    has_quantitative = Column(Boolean, default=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    session = relationship("InterviewSession", back_populates="assessments")
+    question = relationship("InterviewQuestion")
+    answer = relationship("InterviewAnswer")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "question_id": self.question_id,
+            "answer_id": self.answer_id,
+            "quality": self.quality,
+            "reasoning": self.reasoning,
+            "knowledge_gap": self.knowledge_gap,
+            "engineering_gap": self.engineering_gap,
+            "evidence_gap": self.evidence_gap,
+            "experiment_gap": self.experiment_gap,
+            "suggestion": self.suggestion,
+            "has_example": self.has_example,
+            "has_reason": self.has_reason,
+            "has_quantitative": self.has_quantitative,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class InterviewGap(Base):
+    """Gap identified during interview"""
+    __tablename__ = "interview_gaps"
+
+    id = Column(String(36), primary_key=True)
+    session_id = Column(String(36), ForeignKey("interview_sessions.id"), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    question_id = Column(String(36), ForeignKey("interview_questions.id"), nullable=True)
+    task_id = Column(String(36), nullable=True)
+
+    gap_type = Column(String(50), nullable=False)  # "knowledge", "engineering", "evidence", "experiment"
+    description = Column(Text, nullable=False)
+    severity = Column(String(20), default="medium")  # "low", "medium", "high"
+    status = Column(String(20), default="identified")  # "identified", "addressed", "verified"
+    recommendation = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    session = relationship("InterviewSession", back_populates="gaps")
+    project = relationship("Project")
+    question = relationship("InterviewQuestion")
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "project_id": self.project_id,
+            "question_id": self.question_id,
+            "task_id": self.task_id,
+            "gap_type": self.gap_type,
+            "description": self.description,
+            "severity": self.severity,
+            "status": self.status,
+            "recommendation": self.recommendation,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
         }
 
 
