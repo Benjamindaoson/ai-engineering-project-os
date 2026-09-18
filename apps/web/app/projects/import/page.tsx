@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 
 export default function ImportPage() {
+  const router = useRouter()
   const [githubUrl, setGithubUrl] = useState('')
   const [localPath, setLocalPath] = useState('')
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<any>(null)
   const [error, setError] = useState('')
+  const [result, setResult] = useState<any>(null)
 
   const handleImport = async () => {
     setLoading(true)
@@ -112,50 +114,75 @@ export default function ImportPage() {
             <code className="text-sm bg-gray-100 px-2 py-1 rounded">{result.project_id}</code>
           </div>
 
+          <div className="mt-4 p-4 bg-white rounded-lg">
+            <p className="text-sm text-gray-600 mb-2">工作区路径</p>
+            <code className="text-sm bg-gray-100 px-2 py-1 rounded">{result.workspace_path}</code>
+          </div>
+
           <div className="mt-4 flex gap-3">
-            <a
-              href={`/projects/health?project_id=${result.project_id}`}
+            <button
+              onClick={() => router.push(`/projects/health?project_id=${result.project_id}`)}
               className="flex-1 py-3 bg-green-600 text-white rounded-lg font-medium text-center hover:bg-green-700 transition-colors"
             >
               立即体检
-            </a>
+            </button>
           </div>
         </div>
       )}
 
-      {/* Demo Projects */}
-      <div className="mt-12">
-        <h2 className="text-xl font-semibold mb-4">或者使用演示项目</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <DemoProjectCard
-            name="AIEduRAG"
-            description="教育检索增强生成系统"
-            tech="Python, RAG, Milvus"
-            href="#"
-          />
-          <DemoProjectCard
-            name="Enterprise Data Agent"
-            description="企业数据分析智能体"
-            tech="Python, Multi-Agent, PostgreSQL"
-            href="#"
-          />
-        </div>
+      {/* Existing Projects */}
+      <div className="mt-8">
+        <h2 className="text-xl font-semibold mb-4">已有项目</h2>
+        <ExistingProjects />
       </div>
     </div>
   )
 }
 
-function DemoProjectCard({ name, description, tech, href }: any) {
+function ExistingProjects() {
+  const [projects, setProjects] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchProjects()
+  }, [])
+
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch('/api/projects')
+      const data = await response.json()
+      setProjects(data.projects || [])
+    } catch (err) {
+      console.error('Failed to fetch projects:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return <div className="text-gray-500">加载中...</div>
+  }
+
+  if (projects.length === 0) {
+    return <div className="text-gray-500">暂无项目</div>
+  }
+
   return (
-    <a
-      href={href}
-      className="block p-6 bg-white border rounded-xl hover:border-blue-300 hover:shadow-md transition-all"
-    >
-      <h3 className="font-semibold mb-2">{name}</h3>
-      <p className="text-sm text-gray-600 mb-3">{description}</p>
-      <span className="inline-block px-2 py-1 bg-gray-100 text-xs text-gray-600 rounded">
-        {tech}
-      </span>
-    </a>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {projects.map((project) => (
+        <div key={project.id} className="p-6 bg-white border rounded-xl hover:border-blue-300 transition-colors">
+          <h3 className="font-semibold mb-2">{project.name}</h3>
+          <p className="text-sm text-gray-500 mb-3">
+            成熟度: <span className="capitalize">{project.current_maturity}</span>
+          </p>
+          <button
+            onClick={() => window.location.href = `/projects/health?project_id=${project.id}`}
+            className="text-blue-600 hover:text-blue-700 font-medium"
+          >
+            查看详情 →
+          </button>
+        </div>
+      ))}
+    </div>
   )
 }

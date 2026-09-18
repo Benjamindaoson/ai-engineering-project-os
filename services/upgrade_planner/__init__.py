@@ -13,7 +13,7 @@ from packages.contracts.models import (
     GapPriority, EffortEstimate, TaskStatus,
     MaturityLevel
 )
-from packages.maturity-model import MaturityEvaluator
+from packages.maturity_model import MaturityEvaluator
 
 
 @dataclass

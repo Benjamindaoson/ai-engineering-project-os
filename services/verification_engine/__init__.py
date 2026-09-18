@@ -16,7 +16,7 @@ from packages.contracts.models import (
     UpgradeTask, ExecutionRecord, CompletionCriterion,
     TaskStatus, TestResult
 )
-from packages.evidence-model import Evidence, EvidenceType
+from packages.evidence_model import Evidence, EvidenceType
 
 
 @dataclass

@@ -1,108 +1,48 @@
 """
 AI Engineering Project OS - API Service
 
-FastAPI-based API for the AI Engineering Project OS.
+FastAPI-based API with real database persistence and services.
 """
 
 import os
 import json
 import uuid
+from contextlib import asynccontextmanager
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.contracts.models import (
-    ProjectType, GapPriority, TaskStatus, MaturityLevel
+from packages.database import (
+    init_db, get_session, async_session,
+    ProjectRepository, SnapshotRepository, FactRepository,
+    AssessmentRepository, GapRepository, TaskRepository,
+    ExecutionRepository, VerificationRepository,
+    EvidenceRepository, VersionRepository, InterviewRepository,
 )
-from packages.maturity-model import MaturityEvaluator, MaturityLevel
-from services.project-auditor import ProjectAuditor
-from services.upgrade-planner import UpgradePlanner
-from services.engineering-mentor import EngineeringMentor
-from services.execution-runtime import ExecutionRuntime, ExecutionConfig
-from services.verification-engine import VerificationEngine
-from services.interview-engine import InterviewEngine
+from packages.contracts.models import TaskStatus
+from services.project_auditor import ProjectAuditor
+from services.upgrade_planner import UpgradePlanner
+from services.engineering_mentor import EngineeringMentor
+from services.execution_runtime import ExecutionRuntime, ExecutionConfig
+from services.verification_engine import VerificationEngine
+from services.interview_engine import InterviewEngine
+from services.repo_import import RepoImportService
 
 
 # ============================================================================
-# Pydantic Models for API
+# Lifespan
 # ============================================================================
 
-class ProjectImportRequest(BaseModel):
-    github_url: Optional[str] = None
-    local_path: Optional[str] = None
-    user_goals: Optional[List[str]] = None
-
-
-class ProjectImportResponse(BaseModel):
-    project_id: str
-    name: str
-    status: str
-    message: str
-
-
-class AuditResponse(BaseModel):
-    project_id: str
-    project_facts: Dict[str, Any]
-    maturity_assessment: Dict[str, Any]
-    gaps: List[Dict[str, Any]]
-    raw_observations: List[Dict[str, Any]]
-
-
-class UpgradePlanResponse(BaseModel):
-    project_id: str
-    recommended_tasks: List[Dict[str, Any]]
-    prioritization_rationale: str
-    immediate_next_steps: List[str]
-    estimated_total_effort: str
-    current_level: str
-    target_level: str
-    upgrade_path: List[str]
-
-
-class MentorRequest(BaseModel):
-    task_id: str
-    project_context: Dict[str, Any]
-
-
-class MentorResponse(BaseModel):
-    task_id: str
-    learning_content: Dict[str, Any]
-    code_examples: Optional[List[Dict[str, Any]]]
-    related_concepts: List[Dict[str, Any]]
-    common_pitfalls: List[str]
-
-
-class ExecutionResponse(BaseModel):
-    execution_id: str
-    task_id: str
-    status: str
-    changes: List[Dict[str, Any]]
-    test_results: List[Dict[str, Any]]
-    error: Optional[str]
-
-
-class VerificationResponse(BaseModel):
-    task_id: str
-    verification_results: List[Dict[str, Any]]
-    overall_status: str
-    missing_evidence: List[Dict[str, str]]
-    recommendations: List[str]
-
-
-class InterviewRequest(BaseModel):
-    project_id: str
-    execution_record_ids: Optional[List[str]] = None
-
-
-class InterviewResponse(BaseModel):
-    session_id: str
-    project_id: str
-    initial_questions: List[Dict[str, Any]]
-    gap_analysis: List[Dict[str, Any]]
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database on startup"""
+    await init_db()
+    yield
 
 
 # ============================================================================
@@ -112,10 +52,10 @@ class InterviewResponse(BaseModel):
 app = FastAPI(
     title="AI Engineering Project OS",
     description="Upgrade AI projects from idea to production",
-    version="0.1.0",
+    version="0.2.0",
+    lifespan=lifespan,
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -124,428 +64,593 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# In-memory storage (replace with database in production)
-projects_db: Dict[str, Dict[str, Any]] = {}
-audits_db: Dict[str, Dict[str, Any]] = {}
-tasks_db: Dict[str, Dict[str, Any]] = {}
-executions_db: Dict[str, Dict[str, Any]] = {}
-sessions_db: Dict[str, Dict[str, Any]] = {}
+# Services
+import_service = RepoImportService()
+auditor = ProjectAuditor()
+planner = UpgradePlanner()
+mentor = EngineeringMentor()
+verifier = VerificationEngine()
 
 
 # ============================================================================
-# Helper Functions
+# Pydantic Models
 # ============================================================================
 
-def get_project_dir(project_id: str) -> Optional[str]:
-    """Get project directory from database"""
-    if project_id in projects_db:
-        return projects_db[project_id].get("local_path")
-    return None
+class ProjectImportRequest(BaseModel):
+    github_url: Optional[str] = None
+    local_path: Optional[str] = None
+    user_goals: Optional[List[str]] = None
 
 
-def save_project_state(project_id: str, state: Dict[str, Any]):
-    """Save project state"""
-    if project_id in projects_db:
-        projects_db[project_id].update(state)
+class AuditRequest(BaseModel):
+    project_id: str
+
+
+class TaskExecuteRequest(BaseModel):
+    task_id: str
+
+
+class InterviewAnswerRequest(BaseModel):
+    question_id: str
+    answer: str
 
 
 # ============================================================================
-# API Endpoints - Project Management
+# Database Dependency
 # ============================================================================
 
-@app.post("/api/projects/import", response_model=ProjectImportResponse)
-async def import_project(request: ProjectImportRequest):
+async def get_db() -> AsyncSession:
+    """Get database session"""
+    async with async_session() as session:
+        yield session
+
+
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
+@app.get("/health")
+async def health_check():
+    """Health check"""
+    return {"status": "healthy", "version": "0.2.0"}
+
+
+# ---- Projects ----
+
+@app.post("/api/projects/import")
+async def import_project(
+    request: ProjectImportRequest,
+    db: AsyncSession = Depends(get_db),
+):
     """Import a project from GitHub or local path"""
-    project_id = str(uuid.uuid4())
-    
-    # Validate input
     if not request.github_url and not request.local_path:
-        raise HTTPException(status_code=400, detail="Either github_url or local_path must be provided")
+        raise HTTPException(status_code=400, detail="Either github_url or local_path required")
     
-    # Determine project path
-    if request.local_path:
-        project_path = request.local_path
+    project_repo = ProjectRepository(db)
+    snapshot_repo = SnapshotRepository(db)
+    
+    # Import repository
+    if request.github_url:
+        result = import_service.import_github(request.github_url)
     else:
-        # Clone from GitHub (simplified - would need git clone in real implementation)
-        raise HTTPException(status_code=501, detail="GitHub import not yet implemented")
+        result = import_service.import_local(request.local_path)
     
-    if not os.path.exists(project_path):
-        raise HTTPException(status_code=404, detail=f"Project path not found: {project_path}")
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
     
-    # Get project name
-    project_name = Path(project_path).name
+    # Get project name from path
+    project_name = Path(result.workspace_path).name
     
-    # Save project
-    projects_db[project_id] = {
-        "id": project_id,
-        "name": project_name,
-        "github_url": request.github_url,
-        "local_path": project_path,
-        "user_goals": request.user_goals or [],
-        "created_at": datetime.now().isoformat(),
-    }
-    
-    return ProjectImportResponse(
-        project_id=project_id,
+    # Create project in database
+    project = await project_repo.create(
         name=project_name,
-        status="imported",
-        message=f"Project '{project_name}' imported successfully",
+        github_url=request.github_url,
+        local_path=result.workspace_path,
     )
+    
+    # Create snapshot
+    await snapshot_repo.create(
+        project_id=project.id,
+        repo_url=result.repo_url,
+        commit_sha=result.commit_sha,
+        workspace_path=result.workspace_path,
+        branch=result.branch,
+    )
+    
+    return {
+        "project_id": project.id,
+        "name": project.name,
+        "status": "imported",
+        "workspace_path": result.workspace_path,
+        "commit_sha": result.commit_sha,
+    }
 
 
 @app.get("/api/projects")
-async def list_projects():
-    """List all imported projects"""
+async def list_projects(db: AsyncSession = Depends(get_db)):
+    """List all projects"""
+    repo = ProjectRepository(db)
+    projects = await repo.list_all()
     return {
         "projects": [
             {
-                "id": p["id"],
-                "name": p["name"],
-                "github_url": p.get("github_url"),
-                "created_at": p["created_at"],
+                "id": p.id,
+                "name": p.name,
+                "github_url": p.github_url,
+                "current_maturity": p.current_maturity,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
             }
-            for p in projects_db.values()
+            for p in projects
         ]
     }
 
 
 @app.get("/api/projects/{project_id}")
-async def get_project(project_id: str):
+async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Get project details"""
-    if project_id not in projects_db:
-        raise HTTPException(status_code=404, detail="Project not found")
-    return projects_db[project_id]
-
-
-# ============================================================================
-# API Endpoints - Project Audit
-# ============================================================================
-
-@app.post("/api/projects/{project_id}/audit", response_model=AuditResponse)
-async def audit_project(project_id: str, background_tasks: BackgroundTasks):
-    """Audit a project and assess its maturity"""
-    if project_id not in projects_db:
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
-    project = projects_db[project_id]
-    project_path = project.get("local_path")
+    return {
+        "id": project.id,
+        "name": project.name,
+        "description": project.description,
+        "github_url": project.github_url,
+        "local_path": project.local_path,
+        "current_maturity": project.current_maturity,
+        "created_at": project.created_at.isoformat() if project.created_at else None,
+        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+    }
+
+
+@app.post("/api/projects/{project_id}/audit")
+async def audit_project(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Audit a project"""
+    project_repo = ProjectRepository(db)
+    snapshot_repo = SnapshotRepository(db)
+    fact_repo = FactRepository(db)
+    assessment_repo = AssessmentRepository(db)
+    gap_repo = GapRepository(db)
     
-    if not project_path or not os.path.exists(project_path):
-        raise HTTPException(status_code=400, detail="Project path not available")
+    project = await project_repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
     
-    # Run auditor
-    auditor = ProjectAuditor()
+    workspace_path = project.local_path
+    if not workspace_path or not os.path.exists(workspace_path):
+        raise HTTPException(status_code=400, detail="Project workspace not found")
+    
+    # Run audit
     result = auditor.audit(
-        project_path=project_path,
+        project_path=workspace_path,
         project_id=project_id,
-        github_url=project.get("github_url"),
-        user_goals=project.get("user_goals"),
+        github_url=project.github_url,
     )
     
-    # Save audit
-    audits_db[project_id] = result
-    save_project_state(project_id, {"last_audit": result})
+    # Get latest snapshot
+    snapshot = await snapshot_repo.get_latest(project_id)
+    snapshot_id = snapshot.id if snapshot else None
     
-    return AuditResponse(
+    # Save facts
+    facts = result["project_facts"]
+    fact = await fact_repo.create(
         project_id=project_id,
-        project_facts=result["project_facts"],
-        maturity_assessment=result["maturity_assessment"],
-        gaps=result["gaps"],
-        raw_observations=result["raw_observations"],
+        snapshot_id=snapshot_id,
+        languages=facts.get("main_language", []),
+        frameworks=facts.get("frameworks", []),
+        databases=facts.get("database", []),
+        deployment=facts.get("deployment", []),
+        project_type=facts.get("project_type", "other"),
+        total_files=facts.get("total_files", 0),
+        total_lines=facts.get("total_lines", 0),
+        code_lines=facts.get("code_lines", 0),
+        test_files=facts.get("test_files", 0),
+        config_files=facts.get("config_files", 0),
+        has_readme=facts.get("has_readme", False),
+        has_api_docs=facts.get("has_api_docs", False),
+        has_deployment_docs=facts.get("has_deployment_docs", False),
+        implementation_status={},
+        raw_observations=facts.get("raw_observations", []),
     )
+    
+    # Save assessment
+    assessment = result["maturity_assessment"]
+    maturity_record = await assessment_repo.create(
+        project_id=project_id,
+        snapshot_id=snapshot_id,
+        overall_level=assessment.get("overall_level", "idea"),
+        dimension_scores=assessment.get("dimension_scores", {}),
+        blockers=assessment.get("blockers", []),
+        recommendations=assessment.get("recommendations", []),
+    )
+    
+    # Update project maturity
+    await project_repo.update_maturity(project_id, assessment.get("overall_level", "idea"))
+    
+    # Save gaps
+    await gap_repo.delete_for_project(project_id)
+    gaps_data = result["gaps"]
+    for g in gaps_data:
+        g["project_id"] = project_id
+    await gap_repo.create_batch(gaps_data)
+    
+    return {
+        "project_id": project_id,
+        "project_facts": facts,
+        "maturity_assessment": assessment,
+        "gaps": gaps_data,
+        "raw_observations": result.get("raw_observations", []),
+    }
 
 
 @app.get("/api/projects/{project_id}/audit")
-async def get_project_audit(project_id: str):
-    """Get the latest audit for a project"""
-    if project_id not in audits_db:
-        raise HTTPException(status_code=404, detail="Audit not found")
-    return audits_db[project_id]
+async def get_project_audit(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Get latest audit for project"""
+    assessment_repo = AssessmentRepository(db)
+    fact_repo = FactRepository(db)
+    gap_repo = GapRepository(db)
+    
+    assessment = await assessment_repo.get_latest(project_id)
+    facts = await fact_repo.get_latest(project_id)
+    gaps = await gap_repo.get_for_project(project_id)
+    
+    if not assessment:
+        raise HTTPException(status_code=404, detail="No audit found")
+    
+    return {
+        "maturity_assessment": {
+            "overall_level": assessment.overall_level,
+            "dimension_scores": assessment.dimension_scores,
+            "blockers": assessment.blockers,
+            "recommendations": assessment.recommendations,
+        },
+        "gaps": [g.to_dict() for g in gaps],
+    }
 
 
-# ============================================================================
-# API Endpoints - Upgrade Planning
-# ============================================================================
+# ---- Upgrade Planning ----
 
-@app.post("/api/projects/{project_id}/plan", response_model=UpgradePlanResponse)
-async def plan_upgrades(project_id: str):
-    """Generate upgrade plan for a project"""
-    if project_id not in audits_db:
+@app.post("/api/projects/{project_id}/plan")
+async def plan_upgrades(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Generate upgrade plan"""
+    assessment_repo = AssessmentRepository(db)
+    fact_repo = FactRepository(db)
+    gap_repo = GapRepository(db)
+    task_repo = TaskRepository(db)
+    
+    assessment = await assessment_repo.get_latest(project_id)
+    facts = await fact_repo.get_latest(project_id)
+    gaps = await gap_repo.get_for_project(project_id)
+    
+    if not assessment or not facts:
         raise HTTPException(status_code=400, detail="Project must be audited first")
     
-    audit = audits_db[project_id]
-    project = projects_db.get(project_id, {})
-    
-    # Run planner
-    planner = UpgradePlanner()
+    # Generate plan
     result = planner.plan(
-        project_facts=audit["project_facts"],
-        maturity_assessment=audit["maturity_assessment"],
-        gaps=audit["gaps"],
-        user_goals=project.get("user_goals", []),
+        project_facts={
+            "main_language": facts.languages,
+            "frameworks": facts.frameworks,
+            "database": facts.databases,
+            "project_type": facts.project_type,
+        },
+        maturity_assessment={
+            "overall_level": assessment.overall_level,
+            "dimension_scores": assessment.dimension_scores,
+        },
+        gaps=[g.to_dict() for g in gaps],
+        user_goals=[],
     )
     
     # Save tasks
-    for task_dict in result["recommended_tasks"]:
-        task_id = task_dict["id"]
-        tasks_db[task_id] = task_dict
+    for task_data in result["recommended_tasks"]:
+        task_data["project_id"] = project_id
+        await task_repo.create(task_data)
     
-    return UpgradePlanResponse(
-        project_id=project_id,
-        recommended_tasks=result["recommended_tasks"],
-        prioritization_rationale=result["prioritization_rationale"],
-        immediate_next_steps=result["immediate_next_steps"],
-        estimated_total_effort=result["estimated_total_effort"],
-        current_level=result["current_level"],
-        target_level=result["target_level"],
-        upgrade_path=result["upgrade_path"],
-    )
+    return result
 
 
-# ============================================================================
-# API Endpoints - Engineering Mentor
-# ============================================================================
+@app.get("/api/projects/{project_id}/tasks")
+async def get_project_tasks(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Get all tasks for project"""
+    repo = TaskRepository(db)
+    tasks = await repo.get_for_project(project_id)
+    return {
+        "tasks": [
+            {
+                "id": t.id,
+                "title": t.title,
+                "description": t.description,
+                "gap_id": t.gap_id,
+                "status": t.status,
+                "estimated_effort": t.estimated_effort,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+                "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            }
+            for t in tasks
+        ]
+    }
 
-@app.post("/api/tasks/{task_id}/mentor", response_model=MentorResponse)
-async def get_mentor_guidance(task_id: str):
-    """Get mentoring for a specific task"""
-    if task_id not in tasks_db:
+
+# ---- Tasks ----
+
+@app.get("/api/tasks/{task_id}")
+async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Get task details"""
+    repo = TaskRepository(db)
+    task = await repo.get(task_id)
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    task_dict = tasks_db[task_id]
+    return {
+        "id": task.id,
+        "project_id": task.project_id,
+        "gap_id": task.gap_id,
+        "title": task.title,
+        "description": task.description,
+        "learning_content": task.learning_content,
+        "completion_criteria": task.completion_criteria,
+        "estimated_effort": task.estimated_effort,
+        "status": task.status,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+    }
+
+
+@app.post("/api/tasks/{task_id}/mentor")
+async def get_task_mentor(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Get mentor guidance for task"""
+    task_repo = TaskRepository(db)
+    project_repo = ProjectRepository(db)
     
-    # Create task object
-    from packages.contracts.models import UpgradeTask, LearningContent, CompletionCriterion
+    task = await task_repo.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
     
-    task = UpgradeTask(
-        id=task_dict["id"],
-        project_id=task_dict["project_id"],
-        gap_id=task_dict["gap_id"],
-        title=task_dict["title"],
-        description=task_dict["description"],
-        learning_content=LearningContent(**task_dict.get("learning_content", {})),
-        completion_criteria=[
-            CompletionCriterion(**c) for c in task_dict.get("completion_criteria", [])
-        ],
-        estimated_effort=task_dict.get("estimated_effort", ""),
-        prerequisites=task_dict.get("prerequisites", []),
-        status=TaskStatus(task_dict.get("status", "pending")),
+    project = await project_repo.get(task.project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Convert to UpgradeTask
+    from packages.contracts.models import UpgradeTask as UpgradeTaskModel, LearningContent, CompletionCriterion
+    
+    upgrade_task = UpgradeTaskModel(
+        id=task.id,
+        project_id=task.project_id,
+        gap_id=task.gap_id or "",
+        title=task.title,
+        description=task.description,
+        learning_content=LearningContent(**task.learning_content) if task.learning_content else LearningContent(),
+        completion_criteria=[CompletionCriterion(**c) for c in (task.completion_criteria or [])],
+        estimated_effort=task.estimated_effort,
     )
     
-    # Run mentor
-    mentor = EngineeringMentor()
     result = mentor.mentor(
-        task=task,
-        project_context={"tech_stack": []},  # Would get from project facts
+        task=upgrade_task,
+        project_context={
+            "tech_stack": project.name.split("-") if project else [],
+        }
     )
     
-    return MentorResponse(
-        task_id=task_id,
-        learning_content=result.learning_content.to_dict(),
-        code_examples=result.code_examples,
-        related_concepts=result.related_concepts,
-        common_pitfalls=result.common_pitfalls,
-    )
+    return result.to_dict()
 
 
-# ============================================================================
-# API Endpoints - Execution
-# ============================================================================
-
-@app.post("/api/tasks/{task_id}/execute", response_model=ExecutionResponse)
-async def execute_task(task_id: str, background_tasks: BackgroundTasks):
+@app.post("/api/tasks/{task_id}/execute")
+async def execute_task(task_id: str, db: AsyncSession = Depends(get_db)):
     """Execute a task"""
-    if task_id not in tasks_db:
+    task_repo = TaskRepository(db)
+    project_repo = ProjectRepository(db)
+    execution_repo = ExecutionRepository(db)
+    
+    task = await task_repo.get(task_id)
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    task_dict = tasks_db[task_id]
-    project_id = task_dict["project_id"]
+    project = await project_repo.get(task.project_id)
+    if not project or not project.local_path:
+        raise HTTPException(status_code=400, detail="Project workspace not found")
     
-    if project_id not in projects_db:
-        raise HTTPException(status_code=400, detail="Project not found")
+    # Convert to models
+    from packages.contracts.models import UpgradeTask as UpgradeTaskModel, LearningContent, CompletionCriterion
     
-    project = projects_db[project_id]
-    project_path = project.get("local_path")
-    
-    if not project_path:
-        raise HTTPException(status_code=400, detail="Project path not available")
-    
-    # Create task object
-    from packages.contracts.models import UpgradeTask, LearningContent, CompletionCriterion
-    
-    task = UpgradeTask(
-        id=task_dict["id"],
-        project_id=task_dict["project_id"],
-        gap_id=task_dict["gap_id"],
-        title=task_dict["title"],
-        description=task_dict["description"],
-        learning_content=LearningContent(**task_dict.get("learning_content", {})),
-        completion_criteria=[
-            CompletionCriterion(**c) for c in task_dict.get("completion_criteria", [])
-        ],
-        estimated_effort=task_dict.get("estimated_effort", ""),
-        prerequisites=task_dict.get("prerequisites", []),
-        status=TaskStatus.IN_PROGRESS,
+    upgrade_task = UpgradeTaskModel(
+        id=task.id,
+        project_id=task.project_id,
+        gap_id=task.gap_id or "",
+        title=task.title,
+        description=task.description,
+        learning_content=LearningContent(**task.learning_content) if task.learning_content else LearningContent(),
+        completion_criteria=[CompletionCriterion(**c) for c in (task.completion_criteria or [])],
+        estimated_effort=task.estimated_effort,
     )
     
     # Execute
-    runtime = ExecutionRuntime(ExecutionConfig(save_baseline=True, run_tests=True))
-    record = runtime.execute(task, project_path)
+    config = ExecutionConfig(
+        save_baseline=True,
+        run_tests=True,
+        timeout_seconds=120,
+    )
+    runtime = ExecutionRuntime(config)
+    record = runtime.execute(upgrade_task, project.local_path)
     
     # Save execution
-    executions_db[record.id] = record.to_dict()
-    task_dict["status"] = record.status.value
-    tasks_db[task_id] = task_dict
+    execution = await execution_repo.create({
+        "task_id": task.id,
+        "project_id": task.project_id,
+        "changes": [
+            {"file_path": c.file_path, "change_type": c.change_type, "diff": c.diff, "purpose": c.purpose}
+            for c in record.changes
+        ],
+        "test_results": [
+            {"test_name": t.test_name, "passed": t.passed, "duration_ms": t.duration_ms, "error": t.error}
+            for t in record.test_results
+        ],
+        "execution_log": record.execution_log,
+        "status": record.status.value,
+    })
     
-    return ExecutionResponse(
-        execution_id=record.id,
-        task_id=task_id,
-        status=record.status.value,
-        changes=[{"file_path": c.file_path, "change_type": c.change_type, "purpose": c.purpose} 
-                 for c in record.changes],
-        test_results=[{"test_name": t.test_name, "passed": t.passed, "error": t.error}
-                      for t in record.test_results],
-        error=record.error,
-    )
+    # Update task status
+    await task_repo.update_status(task.id, record.status.value)
+    
+    return {
+        "execution_id": execution.id,
+        "task_id": task.id,
+        "status": record.status.value,
+        "changes": len(record.changes),
+        "test_results": len(record.test_results),
+        "error": record.error,
+    }
 
 
-# ============================================================================
-# API Endpoints - Verification
-# ============================================================================
+# ---- Verification ----
 
-@app.post("/api/executions/{execution_id}/verify", response_model=VerificationResponse)
-async def verify_execution(execution_id: str):
-    """Verify task execution"""
-    if execution_id not in executions_db:
+@app.post("/api/executions/{execution_id}/verify")
+async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)):
+    """Verify execution"""
+    exec_repo = ExecutionRepository(db)
+    task_repo = TaskRepository(db)
+    verification_repo = VerificationRepository(db)
+    
+    execution = await exec_repo.get(execution_id)
+    if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
     
-    exec_dict = executions_db[execution_id]
-    task_id = exec_dict["task_id"]
-    
-    if task_id not in tasks_db:
-        raise HTTPException(status_code=400, detail="Task not found")
-    
-    task_dict = tasks_db[task_id]
-    project_id = task_dict["project_id"]
-    
-    # Get project path
-    if project_id not in projects_db:
-        raise HTTPException(status_code=400, detail="Project not found")
-    
-    project = projects_db[project_id]
-    project_path = project.get("local_path")
+    task = await task_repo.get(execution.task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
     
     # Reconstruct objects
-    from packages.contracts.models import UpgradeTask, ExecutionRecord, LearningContent, CompletionCriterion, CodeChange, TestResult
-    
-    task = UpgradeTask(
-        id=task_dict["id"],
-        project_id=task_dict["project_id"],
-        gap_id=task_dict["gap_id"],
-        title=task_dict["title"],
-        description=task_dict["description"],
-        learning_content=LearningContent(**task_dict.get("learning_content", {})),
-        completion_criteria=[
-            CompletionCriterion(**c) for c in task_dict.get("completion_criteria", [])
-        ],
-        estimated_effort=task_dict.get("estimated_effort", ""),
-        prerequisites=task_dict.get("prerequisites", []),
-        status=TaskStatus(exec_dict.get("status", "pending")),
+    from packages.contracts.models import (
+        UpgradeTask as UpgradeTaskModel, ExecutionRecord as ExecutionRecordModel,
+        LearningContent, CompletionCriterion, CodeChange, TestResult,
     )
     
-    record = ExecutionRecord(
-        id=exec_dict["id"],
-        task_id=exec_dict["task_id"],
-        project_id=exec_dict["project_id"],
-        changes=[CodeChange(**c) for c in exec_dict.get("changes", [])],
-        execution_log=exec_dict.get("execution_log", ""),
-        test_results=[TestResult(**t) for t in exec_dict.get("test_results", [])],
-        status=TaskStatus(exec_dict.get("status", "pending")),
+    upgrade_task = UpgradeTaskModel(
+        id=task.id,
+        project_id=task.project_id,
+        gap_id=task.gap_id or "",
+        title=task.title,
+        description=task.description,
+        learning_content=LearningContent(**task.learning_content) if task.learning_content else LearningContent(),
+        completion_criteria=[CompletionCriterion(**c) for c in (task.completion_criteria or [])],
     )
+    
+    exec_record = ExecutionRecordModel(
+        id=execution.id,
+        task_id=execution.task_id,
+        project_id=execution.project_id,
+        changes=[CodeChange(**c) for c in (execution.changes or [])],
+        execution_log=execution.execution_log or "",
+        test_results=[TestResult(**t) for t in (execution.test_results or [])],
+        status=TaskStatus(execution.status),
+    )
+    
+    # Get project workspace
+    from packages.database import ProjectRepository
+    async with async_session() as session:
+        project_repo = ProjectRepository(session)
+        project = await project_repo.get(execution.project_id)
+        workspace_path = project.local_path if project else ""
     
     # Verify
-    verifier = VerificationEngine()
-    result = verifier.verify(task, record, project_path)
+    result = verifier.verify(upgrade_task, exec_record, workspace_path)
     
-    return VerificationResponse(
-        task_id=task_id,
-        verification_results=[
+    # Save verification
+    verification = await verification_repo.create({
+        "execution_id": execution.id,
+        "task_id": task.id,
+        "verification_results": [
             {"criterion": r.criterion, "status": r.status, "evidence": r.evidence, "details": r.details}
             for r in result.verification_results
         ],
-        overall_status=result.overall_status,
-        missing_evidence=result.missing_evidence,
-        recommendations=result.recommendations,
-    )
+        "overall_status": result.overall_status,
+        "missing_evidence": result.missing_evidence,
+        "recommendations": result.recommendations,
+    })
+    
+    return result.to_dict()
 
 
-# ============================================================================
-# API Endpoints - Interview
-# ============================================================================
+# ---- Evidence ----
 
-@app.post("/api/projects/{project_id}/interview", response_model=InterviewResponse)
-async def start_interview(project_id: str, request: InterviewRequest):
-    """Start an interview session for a project"""
-    if project_id not in projects_db:
-        raise HTTPException(status_code=404, detail="Project not found")
+@app.get("/api/projects/{project_id}/evidence")
+async def get_project_evidence(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Get all evidence for project"""
+    repo = EvidenceRepository(db)
+    evidence = await repo.get_for_project(project_id)
+    return {
+        "evidence": [
+            {
+                "id": e.id,
+                "evidence_type": e.evidence_type,
+                "source_path": e.source_path,
+                "title": e.title,
+                "description": e.description,
+                "created_at": e.created_at.isoformat() if e.created_at else None,
+            }
+            for e in evidence
+        ]
+    }
+
+
+# ---- Interview ----
+
+@app.post("/api/projects/{project_id}/interview")
+async def start_interview(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Start interview session"""
+    interview_repo = InterviewRepository(db)
+    fact_repo = FactRepository(db)
     
-    # Get project data
-    project = projects_db[project_id]
-    audit = audits_db.get(project_id, {})
+    facts = await fact_repo.get_latest(project_id)
+    if not facts:
+        raise HTTPException(status_code=400, detail="Project must be audited first")
     
-    # Get execution records
-    records = []
-    if request.execution_record_ids:
-        for exec_id in request.execution_record_ids:
-            if exec_id in executions_db:
-                records.append(executions_db[exec_id])
+    # Create session
+    session = await interview_repo.create_session(project_id)
     
-    # Run interview engine
+    # Generate questions
     engine = InterviewEngine()
     result = engine.conduct_interview(
-        project_facts=audit.get("project_facts", {}),
-        execution_records=records,
-        architecture_decisions=[],  # Would come from project data
-        maturity_assessment=audit.get("maturity_assessment", {}),
+        project_facts={
+            "project_type": facts.project_type,
+            "frameworks": facts.frameworks,
+            "main_language": facts.languages,
+        },
+        execution_records=[],
+        architecture_decisions=[],
+        maturity_assessment={},
         project_id=project_id,
     )
     
-    # Save session
-    sessions_db[result.session.id] = result.to_dict()
+    # Save questions
+    for q in result.initial_questions:
+        await interview_repo.create_question({
+            "session_id": session.id,
+            "question": q.question,
+            "context": q.context,
+            "follow_ups": q.follow_ups,
+            "gap_type": q.gap_type,
+        })
     
-    return InterviewResponse(
-        session_id=result.session.id,
-        project_id=project_id,
-        initial_questions=[q.to_dict() for q in result.initial_questions],
-        gap_analysis=[
+    return {
+        "session_id": session.id,
+        "project_id": project_id,
+        "questions": [q.to_dict() for q in result.initial_questions],
+        "gap_analysis": [
             {
                 "gap_type": g.gap_type,
                 "description": g.description,
-                "related_task_id": g.related_task_id,
                 "severity": g.severity,
             }
             for g in result.gap_analysis
         ],
-    )
-
-
-# ============================================================================
-# Health Check
-# ============================================================================
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "version": "0.1.0",
-        "projects": len(projects_db),
-        "audits": len(audits_db),
-        "tasks": len(tasks_db),
-        "executions": len(executions_db),
-        "sessions": len(sessions_db),
     }
 
+
+# ============================================================================
+# Main
+# ============================================================================
 
 if __name__ == "__main__":
     import uvicorn

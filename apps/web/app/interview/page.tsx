@@ -1,94 +1,116 @@
 'use client'
 
-import { useState } from 'react'
-
-// Mock interview data
-const mockInterview = {
-  session_id: "session-1",
-  project_name: "AIEduRAG",
-  project_intro: "这是一个教育领域的检索增强生成(RAG)系统，帮助用户从大量教育资料中快速找到相关内容并生成准确答案。",
-  questions: [
-    {
-      id: "q1",
-      question: "请介绍一下这个项目，解决了什么问题？",
-      context: "Project type: RAG",
-      follow_ups: [
-        "目标用户是谁？",
-        "核心价值主张是什么？",
-        "与现有解决方案有什么不同？",
-      ],
-      status: "pending",
-    },
-    {
-      id: "q2",
-      question: "为什么选择混合检索而不是纯向量检索？",
-      context: "Architecture decision: hybrid retrieval",
-      follow_ups: [
-        "纯向量检索有什么问题？",
-        "如何确定混合权重？",
-        "有哪些trade-off？",
-      ],
-      status: "pending",
-    },
-    {
-      id: "q3",
-      question: "重新排序的Cross-Encoder模型是如何选型的？",
-      context: "Implementation: reranking",
-      follow_ups: [
-        "为什么选择这个模型？",
-        "有什么替代方案？",
-        "如何评估重排效果？",
-      ],
-      status: "pending",
-    },
-  ],
-  gap_analysis: [
-    {
-      gap_type: "knowledge",
-      description: "对分布式系统一致性的理解不足",
-      severity: "medium",
-    },
-    {
-      gap_type: "evidence",
-      description: "缺少A/B测试数据",
-      severity: "high",
-    },
-  ],
-}
+import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 
 export default function InterviewPage() {
+  const searchParams = useSearchParams()
+  const projectId = searchParams.get('project_id')
+  
+  const [loading, setLoading] = useState(true)
+  const [starting, setStarting] = useState(false)
+  const [error, setError] = useState('')
+  const [session, setSession] = useState<any>(null)
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [followUpIndex, setFollowUpIndex] = useState<Record<string, number>>({})
-  const [showAnswer, setShowAnswer] = useState(false)
 
-  const questions = mockInterview.questions
+  const fetchInterview = useCallback(async () => {
+    if (!projectId) {
+      setLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/interview`, {
+        method: 'POST',
+      })
+      
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.detail || 'Failed to start interview')
+      }
+      
+      const data = await response.json()
+      setSession(data)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    fetchInterview()
+  }, [fetchInterview])
+
+  const handleStartNew = async () => {
+    setStarting(true)
+    await fetchInterview()
+    setStarting(false)
+  }
+
+  if (!projectId) {
+    return (
+      <div className="max-w-6xl">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
+          <p className="text-yellow-800">请先选择一个项目</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading || starting) {
+    return (
+      <div className="max-w-4xl">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !session) {
+    return (
+      <div className="max-w-4xl">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+          <p className="text-red-700 mb-4">{error}</p>
+          <button
+            onClick={handleStartNew}
+            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            重试
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!session || !session.questions?.length) {
+    return (
+      <div className="max-w-4xl">
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-8 text-center">
+          <h2 className="text-xl font-semibold text-blue-800 mb-4">面试会话</h2>
+          <p className="text-blue-600 mb-6">系统将基于项目实际情况生成面试问题</p>
+          <button
+            onClick={handleStartNew}
+            className="px-8 py-4 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+          >
+            开始面试
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const questions = session.questions
   const currentQ = questions[currentQuestion]
-
-  const handleAnswer = (answer: string) => {
-    setAnswers({ ...answers, currentQ.id]: answer })
-    setShowAnswer(true)
-  }
-
-  const handleNext = () => {
-    if (currentQuestion < questions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1)
-      setShowAnswer(false)
-    }
-  }
-
-  const handleFollowUp = () => {
-    const currentFollowUps = followUpIndex[currentQ.id] || 0
-    if (currentFollowUps < currentQ.follow_ups.length) {
-      setFollowUpIndex({ ...followUpIndex, [currentQ.id]: currentFollowUps + 1 })
-    }
-  }
 
   return (
     <div className="max-w-4xl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">面试工作台</h1>
-        <p className="text-gray-600">{mockInterview.project_name} - 基于真实项目的技术面试</p>
+        <p className="text-gray-600">基于真实项目的技术面试</p>
       </div>
 
       {/* Progress */}
@@ -107,101 +129,75 @@ export default function InterviewPage() {
 
       {/* Current Question */}
       <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
-        {/* Context */}
-        <div className="mb-6">
-          <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
-            {currentQ.context}
-          </span>
-        </div>
-
-        {/* Question */}
-        <h2 className="text-2xl font-semibold mb-6">
-          Q{currentQuestion + 1}: {currentQ.question}
-        </h2>
-
-        {/* Answer Input */}
-        {!showAnswer ? (
-          <div className="space-y-4">
-            <textarea
-              placeholder="在此输入你的回答..."
-              className="w-full h-40 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-              value={answers[currentQ.id] || ''}
-              onChange={(e) => setAnswers({ ...answers, [currentQ.id]: e.target.value })}
-            />
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleAnswer(answers[currentQ.id] || '')}
-                disabled={!answers[currentQ.id]?.trim()}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-              >
-                提交回答
-              </button>
-              <button
-                onClick={handleNext}
-                className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
-              >
-                跳过
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Your Answer */}
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p className="text-sm text-blue-600 mb-2">你的回答</p>
-              <p className="text-gray-800">{answers[currentQ.id]}</p>
-            </div>
-
-            {/* Follow-ups */}
-            {currentQ.follow_ups.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="font-medium text-gray-700">追问</h3>
-                {(followUpIndex[currentQ.id] || 0) > 0 && (
-                  <div className="space-y-3">
-                    {currentQ.follow_ups.slice(0, followUpIndex[currentQ.id]).map((followUp: string, i: number) => (
-                      <div key={i} className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <p className="text-sm text-yellow-600 mb-1">追问 {i + 1}</p>
-                        <p className="font-medium">{followUp}</p>
-                        <textarea
-                          placeholder="你的回答..."
-                          className="w-full mt-3 p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                          rows={2}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {(followUpIndex[currentQ.id] || 0) < currentQ.follow_ups.length && (
-                  <button
-                    onClick={handleFollowUp}
-                    className="px-4 py-2 border border-yellow-400 text-yellow-700 rounded-lg hover:bg-yellow-50"
-                  >
-                    + 继续追问
-                  </button>
-                )}
+        {currentQ && (
+          <>
+            {/* Context */}
+            {currentQ.context && (
+              <div className="mb-6">
+                <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
+                  {currentQ.context}
+                </span>
               </div>
             )}
 
-            {/* Next Button */}
-            <div className="flex justify-end">
-              <button
-                onClick={handleNext}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
-              >
-                {currentQuestion < questions.length - 1 ? '下一题' : '完成面试'}
-              </button>
-            </div>
-          </div>
+            {/* Question */}
+            <h2 className="text-2xl font-semibold mb-6">
+              Q{currentQuestion + 1}: {currentQ.question}
+            </h2>
+
+            {/* Answer Input */}
+            {answers[currentQ.id] !== undefined ? (
+              <div className="space-y-4">
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-600 mb-2">你的回答</p>
+                  <p className="text-gray-800">{answers[currentQ.id]}</p>
+                </div>
+
+                {/* Next Button */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setCurrentQuestion(Math.min(currentQuestion + 1, questions.length - 1))}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
+                  >
+                    {currentQuestion < questions.length - 1 ? '下一题' : '完成面试'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <textarea
+                  placeholder="在此输入你的回答..."
+                  className="w-full h-40 p-4 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                  value={answers[currentQ.id] || ''}
+                  onChange={(e) => setAnswers({ ...answers, [currentQ.id]: e.target.value })}
+                />
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setAnswers({ ...answers, [currentQ.id]: answers[currentQ.id] || '' })}
+                    disabled={!answers[currentQ.id]?.trim()}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    提交回答
+                  </button>
+                  <button
+                    onClick={() => setCurrentQuestion(Math.min(currentQuestion + 1, questions.length - 1))}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+                  >
+                    跳过
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Gap Analysis */}
-      {mockInterview.gap_analysis.length > 0 && (
+      {session.gap_analysis?.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
           <h2 className="text-xl font-semibold mb-6">发现的缺口</h2>
           <div className="space-y-4">
-            {mockInterview.gap_analysis.map((gap, i) => (
+            {session.gap_analysis.map((gap: any, i: number) => (
               <div key={i} className={`p-4 rounded-lg border ${
                 gap.severity === 'high' ? 'bg-red-50 border-red-200' :
                 gap.severity === 'medium' ? 'bg-yellow-50 border-yellow-200' :
@@ -234,13 +230,10 @@ export default function InterviewPage() {
       <div className="bg-white rounded-xl shadow-sm p-8">
         <h2 className="text-xl font-semibold mb-6">问题列表</h2>
         <div className="space-y-3">
-          {questions.map((q, i) => (
+          {questions.map((q: any, i: number) => (
             <button
               key={q.id}
-              onClick={() => {
-                setCurrentQuestion(i)
-                setShowAnswer(false)
-              }}
+              onClick={() => setCurrentQuestion(i)}
               className={`w-full p-4 rounded-lg border text-left transition-colors ${
                 i === currentQuestion ? 'border-blue-300 bg-blue-50' : 'hover:border-gray-300'
               }`}
