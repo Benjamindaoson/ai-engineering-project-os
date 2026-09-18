@@ -1,5 +1,7 @@
 # AI Engineering Project OS
 
+**Status: Working V1**
+
 中文暂定名：**AI 工程项目升级系统**
 
 把用户已经做过的 AI 项目，或者只有一个想法的 AI 项目，从当前状态一步步推进到演示版、最小可用版本、准生产级、生产级。

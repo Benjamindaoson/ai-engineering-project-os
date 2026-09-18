@@ -274,8 +274,41 @@ class Evidence(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    project = relationship("Project")
     version = relationship("ProjectVersion", back_populates="evidence")
+
+
+class Experiment(Base):
+    """Experiment tracking"""
+    __tablename__ = "experiments"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    name = Column(String(500), nullable=False)
+    description = Column(Text, default="")
+    config = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ExperimentRun(Base):
+    """Individual experiment run"""
+    __tablename__ = "experiment_runs"
+
+    id = Column(String(36), primary_key=True)
+    experiment_id = Column(String(36), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True)
+    version_id = Column(String(36), ForeignKey("project_versions.id"), nullable=True)
+    config = Column(JSON, default=dict)
+    status = Column(String(20), default="pending")
+    metrics = Column(JSON, default=dict)
+    latency_ms = Column(Float, default=0.0)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    project = relationship("Project", foreign_keys=[project_id])
+    version = relationship("ProjectVersion", foreign_keys=[version_id])
 
 
 class ProjectVersion(Base):

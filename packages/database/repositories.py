@@ -610,3 +610,66 @@ class InterviewRepository:
         )
         gaps = result.scalars().all()
         return [g.to_dict() for g in gaps]
+
+
+class ExperimentRepository:
+    """Repository for Experiment operations"""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, experiment_data: dict[str, Any]) -> "Experiment":
+        """Create new experiment"""
+        from packages.database.models import Experiment
+        experiment = Experiment(
+            id=str(uuid.uuid4()),
+            project_id=experiment_data["project_id"],
+            name=experiment_data["name"],
+            description=experiment_data.get("description", ""),
+            config=experiment_data.get("config", {}),
+        )
+        self.session.add(experiment)
+        await self.session.commit()
+        await self.session.refresh(experiment)
+        return experiment
+
+    async def get_for_project(self, project_id: str) -> list["Experiment"]:
+        """Get all experiments for project"""
+        from packages.database.models import Experiment
+        result = await self.session.execute(
+            select(Experiment)
+            .where(Experiment.project_id == project_id)
+            .order_by(Experiment.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+
+class ExperimentRunRepository:
+    """Repository for ExperimentRun operations"""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, run_data: dict[str, Any]) -> "ExperimentRun":
+        """Create new experiment run"""
+        from packages.database.models import ExperimentRun
+        run = ExperimentRun(
+            id=str(uuid.uuid4()),
+            experiment_id=run_data["experiment_id"],
+            config=run_data.get("config", {}),
+            status=run_data.get("status", "pending"),
+        )
+        self.session.add(run)
+        await self.session.commit()
+        await self.session.refresh(run)
+        return run
+
+    async def get_for_experiment(self, experiment_id: str) -> list["ExperimentRun"]:
+        """Get all runs for experiment"""
+        from packages.database.models import ExperimentRun
+        result = await self.session.execute(
+            select(ExperimentRun)
+            .where(ExperimentRun.experiment_id == experiment_id)
+            .order_by(ExperimentRun.created_at.desc())
+        )
+        return list(result.scalars().all())

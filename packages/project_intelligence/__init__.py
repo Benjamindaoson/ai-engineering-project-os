@@ -559,3 +559,46 @@ def extract_file_content(file_path: str, start_line: int = 1, end_line: int | No
             return "".join(lines[start_line-1:])
     except:
         return ""
+
+
+def evaluate_product_definition_criteria(facts: dict[str, Any]) -> dict[str, bool]:
+    """
+    Evaluate product definition criteria based on project facts.
+    
+    Product definition is SEPARATE from engineering maturity.
+    A project can have real code but unclear product definition.
+    """
+    results = {}
+    
+    # idea_problem: Check for problem statement in README, docs, or main docstring
+    has_problem = False
+    if facts.get("has_readme"):
+        # README exists - assume problem is documented
+        has_problem = True
+    if any("problem" in obs.get("finding", "").lower() for obs in facts.get("raw_observations", [])):
+        has_problem = True
+    results["idea_problem"] = has_problem
+    
+    # idea_users: Check for user/target documentation
+    has_users = False
+    if facts.get("has_readme"):
+        # README exists - might have user documentation
+        has_users = True
+    results["idea_users"] = has_users
+    
+    # idea_io: Check for input/output definition
+    has_io = False
+    if facts.get("total_files", 0) > 0:
+        # If there's code, there must be some IO
+        has_io = True
+    results["idea_io"] = has_io
+    
+    # idea_data_source: Check for data source
+    has_data_source = len(facts.get("database", [])) > 0 or facts.get("has_rag", False)
+    results["idea_data_source"] = has_data_source
+    
+    # idea_code_exists: Check if real code exists
+    has_code = facts.get("total_files", 0) > 0 and facts.get("code_lines", 0) > 0
+    results["idea_code_exists"] = has_code
+    
+    return results

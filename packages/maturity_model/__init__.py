@@ -7,6 +7,10 @@ Defines the 5-level maturity model for AI engineering projects:
 - mvp: Minimum viable product with real user flow
 - pre_production: Ready for staging with production considerations
 - production: Can run in production with all governance
+
+IMPORTANT: Product Definition and Engineering Maturity are SEPARATE.
+A project can have good engineering (code exists, tests pass) but unclear product definition.
+This model assesses engineering maturity, not product definition.
 """
 
 from dataclasses import dataclass, field
@@ -51,6 +55,43 @@ class MaturityLevel(str, Enum):
         return names.get(self, self.value)
 
 
+class ProductDefinitionLevel(str, Enum):
+    """Product definition level - SEPARATE from engineering maturity"""
+    UNKNOWN = "unknown"      # Cannot determine (no docs, no clear context)
+    CLEAR = "clear"          # Problem, users, IO all clear
+    PARTIAL = "partial"      # Some aspects clear, others missing
+
+
+def evaluate_idea_criteria(facts: dict[str, Any]) -> dict[str, bool]:
+    """
+    Evaluate IDEA level criteria based on project facts.
+    
+    These are the base criteria that determine if project is at least IDEA level.
+    Engineering criteria (code exists) are evaluated separately from product definition.
+    """
+    # Import the function if available
+    try:
+        from packages.project_intelligence import evaluate_product_definition_criteria
+        return evaluate_product_definition_criteria(facts)
+    except ImportError:
+        # Fallback implementation
+        pass
+    
+    results = {}
+    
+    # Product definition criteria (relaxed - don't fail on these)
+    results["idea_problem"] = facts.get("has_readme", False)
+    results["idea_users"] = facts.get("has_readme", False)
+    results["idea_io"] = True  # Assume if code exists
+    results["idea_data_source"] = len(facts.get("database", [])) > 0 or facts.get("has_rag", False)
+    
+    # Engineering criteria (strict)
+    results["idea_code_exists"] = facts.get("total_files", 0) > 0 and facts.get("code_lines", 0) > 0
+    results["idea_tech"] = len(facts.get("main_language", [])) > 0
+    
+    return results
+
+
 @dataclass
 class Criterion:
     """A single criterion that can be evaluated"""
@@ -58,10 +99,122 @@ class Criterion:
     name: str
     description: str
     category: str  # e.g., "core_features", "data", "security"
+    is_product_definition: bool = False  # If True, this is a product definition criterion
+    _evaluate_fn: callable = None  # Custom evaluation function
     
     def evaluate(self, project_facts: dict[str, Any]) -> bool:
-        """Override in subclasses"""
-        raise NotImplementedError
+        """Evaluate this criterion based on project facts"""
+        # Use custom evaluation function if provided
+        if self._evaluate_fn:
+            return self._evaluate_fn(self.id, project_facts)
+        
+        # Default evaluation based on criterion ID
+        return self._default_evaluate(project_facts)
+    
+    def _default_evaluate(self, project_facts: dict[str, Any]) -> bool:
+        """Default evaluation logic"""
+        # For IDEA level product definition criteria, use relaxed evaluation
+        if self.is_product_definition:
+            return self._evaluate_product_definition(project_facts)
+        
+        # For engineering criteria, use strict evaluation
+        return self._evaluate_engineering(project_facts)
+    
+    def _evaluate_product_definition(self, facts: dict[str, Any]) -> bool:
+        """Evaluate product definition criteria (relaxed)"""
+        if self.id == "idea_problem":
+            return facts.get("has_readme", False)
+        elif self.id == "idea_users":
+            return facts.get("has_readme", False)
+        elif self.id == "idea_io":
+            return True  # Assume if code exists
+        elif self.id == "idea_data_source":
+            return len(facts.get("database", [])) > 0 or facts.get("has_rag", False)
+        return False
+    
+    def _evaluate_engineering(self, facts: dict[str, Any]) -> bool:
+        """Evaluate engineering criteria (strict)"""
+        if self.id == "idea_code_exists":
+            return facts.get("total_files", 0) > 0 and facts.get("code_lines", 0) > 0
+        elif self.id == "idea_tech":
+            return len(facts.get("main_language", [])) > 0
+        elif self.id == "demo_code_exists":
+            return facts.get("total_files", 0) > 0 and facts.get("code_lines", 0) > 50
+        elif self.id == "demo_e2e":
+            return facts.get("code_lines", 0) > 100
+        elif self.id == "demo_io":
+            return True  # Any code has some IO
+        elif self.id == "demo_demoable":
+            return facts.get("total_files", 0) > 0
+        elif self.id == "demo_real_data":
+            return facts.get("has_rag", False) or len(facts.get("database", [])) > 0
+        elif self.id == "mvp_user_flow":
+            return facts.get("code_lines", 0) > 200
+        elif self.id == "mvp_persistence":
+            return len(facts.get("database", [])) > 0 or facts.get("has_rag", False)
+        elif self.id == "mvp_error_handling":
+            return facts.get("has_error_handling", False)
+        elif self.id == "mvp_tests":
+            return facts.get("has_pytest", False) or facts.get("test_files", 0) > 0
+        elif self.id == "mvp_evaluation":
+            return facts.get("has_eval", False) or facts.get("test_files", 0) > 0
+        elif self.id == "mvp_repeatable":
+            return facts.get("total_files", 0) > 0
+        elif self.id == "mvp_deploy":
+            return facts.get("has_dockerfile", False) or facts.get("has_ci", False)
+        # Pre-production criteria
+        elif self.id == "preprod_eval_system":
+            return facts.get("has_eval", False) and facts.get("test_files", 0) > 2
+        elif self.id == "preprod_permissions":
+            return facts.get("has_auth", False)
+        elif self.id == "preprod_security":
+            return facts.get("has_input_validation", False)
+        elif self.id == "preprod_monitoring":
+            return facts.get("observability", {}).get("metrics", False)
+        elif self.id == "preprod_logging":
+            return facts.get("observability", {}).get("logging", False)
+        elif self.id == "preprod_retry":
+            return facts.get("has_retry", False)
+        elif self.id == "preprod_regression":
+            return facts.get("test_files", 0) > 2
+        elif self.id == "preprod_auto_tests":
+            return facts.get("has_ci", False)
+        # Production criteria
+        elif self.id == "prod_real_env":
+            return facts.get("has_dockerfile", False) and facts.get("has_ci", False)
+        elif self.id == "prod_continuous_monitoring":
+            return facts.get("observability", {}).get("metrics", False) and \
+                   facts.get("observability", {}).get("logging", False)
+        elif self.id == "prod_fault_recovery":
+            return facts.get("has_retry", False) and facts.get("has_error_handling", False)
+        elif self.id == "prod_version_release":
+            return facts.get("has_ci", False)
+        elif self.id == "prod_rollback":
+            return facts.get("has_dockerfile", False)
+        return False
+
+
+@dataclass
+class ProductDefinition:
+    """Product definition assessment - separate from engineering maturity"""
+    level: ProductDefinitionLevel
+    has_problem_statement: bool
+    has_target_users: bool
+    has_clear_io: bool
+    has_data_source: bool
+    has_tech_feasibility: bool
+    notes: list[str] = field(default_factory=list)
+    
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "level": self.level.value,
+            "has_problem_statement": self.has_problem_statement,
+            "has_target_users": self.has_target_users,
+            "has_clear_io": self.has_clear_io,
+            "has_data_source": self.has_data_source,
+            "has_tech_feasibility": self.has_tech_feasibility,
+            "notes": self.notes,
+        }
 
 
 @dataclass
@@ -108,6 +261,7 @@ class MaturityAssessment:
     """Complete maturity assessment result"""
     overall_level: MaturityLevel
     dimension_scores: dict[str, DimensionScore]
+    product_definition: ProductDefinition | None = None  # SEPARATE from engineering
     evidence: list[dict[str, Any]] = field(default_factory=list)
     blockers: list[dict[str, Any]] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
@@ -125,6 +279,7 @@ class MaturityAssessment:
                 }
                 for k, v in self.dimension_scores.items()
             },
+            "product_definition": self.product_definition.to_dict() if self.product_definition else None,
             "evidence": self.evidence,
             "blockers": self.blockers,
             "recommendations": self.recommendations,
@@ -198,30 +353,45 @@ class MaturityEvaluator:
         """Initialize criteria for each maturity level"""
         # IDEA level criteria
         idea_set = MaturityCriteriaSet(MaturityLevel.IDEA)
+        
+        # Product definition criteria (NOT engineering - separate assessment)
         idea_set.add_criterion(Criterion(
             "idea_problem", "问题定义",
             "项目解决的问题是否清晰定义",
-            "core_features"
+            "core_features",
+            is_product_definition=True
         ))
         idea_set.add_criterion(Criterion(
             "idea_users", "目标用户",
             "目标用户群体是否明确",
-            "core_features"
+            "core_features",
+            is_product_definition=True
         ))
         idea_set.add_criterion(Criterion(
             "idea_io", "输入输出",
             "输入和输出是否定义",
-            "core_features"
+            "core_features",
+            is_product_definition=True
         ))
         idea_set.add_criterion(Criterion(
             "idea_data_source", "数据来源",
             "数据来源是否明确",
-            "data"
+            "data",
+            is_product_definition=True
+        ))
+        
+        # Engineering criteria (real code exists)
+        idea_set.add_criterion(Criterion(
+            "idea_code_exists", "代码存在",
+            "存在可运行的代码文件",
+            "core_features",
+            is_product_definition=False
         ))
         idea_set.add_criterion(Criterion(
             "idea_tech", "技术可行性",
-            "核心技术方案是否可行",
-            "core_features"
+            "核心技术方案是Python/JS等标准技术",
+            "core_features",
+            is_product_definition=False
         ))
         self.criteria_sets[MaturityLevel.IDEA] = idea_set
         
@@ -471,8 +641,11 @@ class MaturityEvaluator:
         Evaluate project maturity based on project facts.
         
         Returns the highest level where most criteria are met.
+        
+        IMPORTANT: Engineering maturity and product definition are SEPARATE.
+        A project with real code can reach DEMO level even without explicit docs.
         """
-        # Evaluate each level
+        # Evaluate each level (filter out product_definition criteria for engineering score)
         level_scores = {}
         level_details = {}
         
@@ -480,11 +653,19 @@ class MaturityEvaluator:
                       MaturityLevel.MVP, MaturityLevel.DEMO, MaturityLevel.IDEA]:
             criteria_set = self.criteria_sets[level]
             results = criteria_set.evaluate(project_facts)
-            score = criteria_set.score(project_facts)
+            # Filter to engineering-only criteria for scoring
+            engineering_results = {
+                k: v for k, v in results.items()
+                if not any(c.is_product_definition for c in criteria_set.criteria if c.id == k)
+            }
+            if engineering_results:
+                score = (sum(1 for v in engineering_results.values() if v) / len(engineering_results)) * 100
+            else:
+                score = 0
             level_scores[level] = score
             level_details[level] = results
         
-        # Determine overall level (highest level with >60% criteria met)
+        # Determine overall engineering level (highest level with >60% criteria met)
         overall_level = MaturityLevel.IDEA
         for level in [MaturityLevel.PRODUCTION, MaturityLevel.PRE_PRODUCTION,
                        MaturityLevel.MVP, MaturityLevel.DEMO, MaturityLevel.IDEA]:
@@ -492,13 +673,16 @@ class MaturityEvaluator:
                 overall_level = level
                 break
         
+        # Assess product definition separately
+        product_def = self._assess_product_definition(project_facts, level_details)
+        
         # Calculate dimension scores
         dimension_scores = {}
         for dim_id, dim_info in self.DIMENSIONS.items():
-            # Find criteria related to this dimension
+            # Find criteria related to this dimension (exclude product definition)
             dim_criteria = [
                 c for c in self.criteria_sets[overall_level].criteria
-                if c.category == dim_id
+                if c.category == dim_id and not c.is_product_definition
             ]
             if dim_criteria:
                 met = [c.name for c in dim_criteria if level_details[overall_level].get(c.id, False)]
@@ -526,20 +710,21 @@ class MaturityEvaluator:
         # Collect evidence
         evidence = project_facts.get("evidence", [])
         
-        # Identify blockers
+        # Identify blockers (exclude product definition for engineering blockers)
         blockers = []
-        missing_criteria = level_details[overall_level]
-        for crit_id, passed in missing_criteria.items():
+        for crit_id, passed in level_details[overall_level].items():
             if not passed:
                 for level in self.criteria_sets:
                     for c in self.criteria_sets[level].criteria:
                         if c.id == crit_id:
-                            blockers.append({
-                                "criterion_id": crit_id,
-                                "criterion_name": c.name,
-                                "category": c.category,
-                                "level_required": level.value,
-                            })
+                            # Skip product definition criteria for engineering blockers
+                            if not c.is_product_definition:
+                                blockers.append({
+                                    "criterion_id": crit_id,
+                                    "criterion_name": c.name,
+                                    "category": c.category,
+                                    "level_required": level.value,
+                                })
                             break
         
         # Generate recommendations
@@ -555,12 +740,68 @@ class MaturityEvaluator:
         elif overall_level == MaturityLevel.PRODUCTION:
             recommendations.append("需要建立持续监控和成本治理")
         
+        # Add product definition recommendation if needed
+        if product_def and product_def.level == ProductDefinitionLevel.UNKNOWN:
+            recommendations.append("建议补充项目的问题定义和目标用户说明")
+        
         return MaturityAssessment(
             overall_level=overall_level,
             dimension_scores=dimension_scores,
+            product_definition=product_def,
             evidence=evidence,
             blockers=blockers,
             recommendations=recommendations,
+        )
+    
+    def _assess_product_definition(
+        self,
+        project_facts: dict[str, Any],
+        level_details: dict,
+    ) -> ProductDefinition:
+        """Assess product definition separately from engineering maturity"""
+        notes = []
+        
+        # Check product definition criteria from IDEA level
+        idea_results = level_details.get(MaturityLevel.IDEA, {})
+        
+        has_problem = idea_results.get("idea_problem", False)
+        has_users = idea_results.get("idea_users", False)
+        has_io = idea_results.get("idea_io", False)
+        has_data_source = idea_results.get("idea_data_source", False)
+        has_code = idea_results.get("idea_code_exists", False)
+        
+        # If project has real code, it's at least PARTIAL
+        if has_code and not has_problem:
+            notes.append("项目有代码但缺少问题定义文档")
+        
+        # Determine level
+        if has_problem and has_users and has_io and has_data_source:
+            level = ProductDefinitionLevel.CLEAR
+        elif has_problem or has_users or has_io or has_data_source:
+            level = ProductDefinitionLevel.PARTIAL
+            if not has_problem:
+                notes.append("缺少问题定义")
+            if not has_users:
+                notes.append("缺少目标用户定义")
+            if not has_io:
+                notes.append("缺少输入输出定义")
+            if not has_data_source:
+                notes.append("缺少数据来源说明")
+        else:
+            level = ProductDefinitionLevel.UNKNOWN
+            if has_code:
+                notes.append("项目有代码但产品定义不明确（可通过访谈补充）")
+            else:
+                notes.append("既无产品定义也无代码")
+        
+        return ProductDefinition(
+            level=level,
+            has_problem_statement=has_problem,
+            has_target_users=has_users,
+            has_clear_io=has_io,
+            has_data_source=has_data_source,
+            has_tech_feasibility=True,  # Assumed if code exists
+            notes=notes,
         )
     
     def get_upgrade_path(self, current_level: MaturityLevel) -> list[MaturityLevel]:
