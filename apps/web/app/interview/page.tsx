@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, Suspense, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-export default function InterviewPage() {
+function InterviewContent() {
   const searchParams = useSearchParams()
   const projectId = searchParams.get('project_id')
   
@@ -13,6 +13,7 @@ export default function InterviewPage() {
   const [session, setSession] = useState<any>(null)
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [submitting, setSubmitting] = useState(false)
 
   const fetchInterview = useCallback(async () => {
     if (!projectId) {
@@ -49,9 +50,43 @@ export default function InterviewPage() {
     setStarting(false)
   }
 
+  const handleSubmitAnswer = async () => {
+    if (!session || !currentQ) return
+    
+    const answerText = answers[currentQ.id]
+    if (!answerText?.trim()) return
+    
+    setSubmitting(true)
+    try {
+      const response = await fetch(`/api/interviews/${session.id}/answers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question_id: currentQ.id,
+          answer: answerText,
+        }),
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        // Update session with new question if there's a follow-up
+        if (data.next_question) {
+          setSession((prev: any) => ({
+            ...prev,
+            questions: [...prev.questions, data.next_question],
+          }))
+        }
+      }
+    } catch (err) {
+      console.error('Failed to submit answer:', err)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   if (!projectId) {
     return (
-      <div className="max-w-6xl">
+      <div className="max-w-4xl">
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
           <p className="text-yellow-800">请先选择一个项目</p>
         </div>
@@ -113,7 +148,6 @@ export default function InterviewPage() {
         <p className="text-gray-600">基于真实项目的技术面试</p>
       </div>
 
-      {/* Progress */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
         <div className="flex items-center justify-between mb-4">
           <span className="text-sm text-gray-500">问题进度</span>
@@ -127,11 +161,9 @@ export default function InterviewPage() {
         </div>
       </div>
 
-      {/* Current Question */}
       <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
         {currentQ && (
           <>
-            {/* Context */}
             {currentQ.context && (
               <div className="mb-6">
                 <span className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">
@@ -140,12 +172,10 @@ export default function InterviewPage() {
               </div>
             )}
 
-            {/* Question */}
             <h2 className="text-2xl font-semibold mb-6">
               Q{currentQuestion + 1}: {currentQ.question}
             </h2>
 
-            {/* Answer Input */}
             {answers[currentQ.id] !== undefined ? (
               <div className="space-y-4">
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -153,7 +183,6 @@ export default function InterviewPage() {
                   <p className="text-gray-800">{answers[currentQ.id]}</p>
                 </div>
 
-                {/* Next Button */}
                 <div className="flex justify-end">
                   <button
                     onClick={() => setCurrentQuestion(Math.min(currentQuestion + 1, questions.length - 1))}
@@ -173,11 +202,11 @@ export default function InterviewPage() {
                 />
                 <div className="flex gap-3">
                   <button
-                    onClick={() => setAnswers({ ...answers, [currentQ.id]: answers[currentQ.id] || '' })}
-                    disabled={!answers[currentQ.id]?.trim()}
+                    onClick={handleSubmitAnswer}
+                    disabled={!answers[currentQ.id]?.trim() || submitting}
                     className="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
                   >
-                    提交回答
+                    {submitting ? '提交中...' : '提交回答'}
                   </button>
                   <button
                     onClick={() => setCurrentQuestion(Math.min(currentQuestion + 1, questions.length - 1))}
@@ -192,7 +221,6 @@ export default function InterviewPage() {
         )}
       </div>
 
-      {/* Gap Analysis */}
       {session.gap_analysis?.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
           <h2 className="text-xl font-semibold mb-6">发现的缺口</h2>
@@ -226,7 +254,6 @@ export default function InterviewPage() {
         </div>
       )}
 
-      {/* Question List */}
       <div className="bg-white rounded-xl shadow-sm p-8">
         <h2 className="text-xl font-semibold mb-6">问题列表</h2>
         <div className="space-y-3">
@@ -251,5 +278,20 @@ export default function InterviewPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function InterviewPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-4xl">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+        </div>
+      </div>
+    }>
+      <InterviewContent />
+    </Suspense>
   )
 }

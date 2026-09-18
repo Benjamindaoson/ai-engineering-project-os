@@ -9,7 +9,7 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 import os
 
 
@@ -145,6 +145,22 @@ class Gap(Base):
     # Relationships
     project = relationship("Project", back_populates="gaps")
     tasks = relationship("EngineeringTask", back_populates="gap")
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "id": self.id,
+            "project_id": self.project_id,
+            "dimension": self.dimension,
+            "description": self.description,
+            "current_state": self.current_state,
+            "target_state": self.target_state,
+            "priority": self.priority,
+            "effort_estimate": self.effort_estimate,
+            "risk": self.risk,
+            "related_criteria": self.related_criteria or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class EngineeringTask(Base):
@@ -294,10 +310,11 @@ class InterviewSession(Base):
 class InterviewQuestion(Base):
     """Interview question"""
     __tablename__ = "interview_questions"
-    
+
     id = Column(String(36), primary_key=True)
     session_id = Column(String(36), ForeignKey("interview_sessions.id"), nullable=False)
-    
+    parent_question_id = Column(String(36), nullable=True)
+
     question = Column(Text, nullable=False)
     context = Column(Text, default="")
     user_answer = Column(Text, nullable=True)
@@ -305,9 +322,24 @@ class InterviewQuestion(Base):
     current_follow_up = Column(Integer, default=0)
     gap_type = Column(String(50), nullable=True)
     status = Column(String(20), default="pending")
-    
+
     # Relationships
     session = relationship("InterviewSession", back_populates="questions")
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary"""
+        return {
+            "id": self.id,
+            "session_id": self.session_id,
+            "parent_question_id": self.parent_question_id,
+            "question": self.question,
+            "context": self.context,
+            "user_answer": self.user_answer,
+            "follow_ups": self.follow_ups or [],
+            "current_follow_up": self.current_follow_up,
+            "gap_type": self.gap_type,
+            "status": self.status,
+        }
 
 
 # ============================================================================

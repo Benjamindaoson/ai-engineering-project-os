@@ -207,7 +207,7 @@ class ExecutionRuntime:
             return "error_handling"
         elif "监控" in title or "日志" in title or "monitor" in title_lower or "log" in title_lower:
             return "monitoring"
-        elif "部署" in title or "docker" in title_lower or "ci" in title_lower:
+        elif "部署" in title or "docker" in title_lower or "ci" in title_lower or "容器化" in title:
             return "deployment"
         elif "权限" in title or "auth" in title_lower:
             return "auth"

@@ -8,9 +8,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
-from packages.contracts.models import (
+from packages.contracts import (
     Gap, UpgradeTask, LearningContent, CompletionCriterion,
-    GapPriority, EffortEstimate, TaskStatus,
+    GapPriority, EffortEstimate, GapRisk, TaskStatus,
     MaturityLevel
 )
 from packages.maturity_model import MaturityEvaluator
@@ -63,8 +63,27 @@ class UpgradePlanner:
         if constraints is None:
             constraints = {}
         
-        # Convert gaps to Gap objects
-        gap_objects = [Gap(**g) for g in gaps]
+        # Convert gaps to Gap objects, providing defaults for missing fields
+        gap_objects = []
+        for g in gaps:
+            try:
+                # Provide defaults for required fields
+                gap_data = {
+                    'id': g.get('id', str(uuid.uuid4())),
+                    'project_id': g.get('project_id', ''),
+                    'dimension': g.get('dimension', 'general'),
+                    'description': g.get('description', ''),
+                    'current_state': g.get('current_state', ''),
+                    'target_state': g.get('target_state', ''),
+                    'priority': GapPriority(g.get('priority', 'medium')),
+                    'effort_estimate': EffortEstimate(g.get('effort_estimate', 'medium')),
+                    'risk': GapRisk(g.get('risk', 'medium')),
+                    'related_criteria': g.get('related_criteria', []),
+                }
+                gap_objects.append(Gap(**gap_data))
+            except Exception as e:
+                print(f"Warning: Failed to create Gap from data: {e}")
+                continue
         
         # Determine target maturity
         current_level = MaturityLevel(maturity_assessment.get("overall_level", "idea"))

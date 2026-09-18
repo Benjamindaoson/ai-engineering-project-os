@@ -115,6 +115,33 @@ async def health_check():
     return {"status": "healthy", "version": "0.2.0"}
 
 
+@app.get("/test/planner")
+async def test_planner():
+    """Test the planner directly"""
+    try:
+        result = planner.plan(
+            project_facts={
+                "main_language": ["Python"],
+                "frameworks": ["FastAPI"],
+                "database": ["SQLite"],
+                "project_type": "rag",
+            },
+            maturity_assessment={
+                "overall_level": "idea",
+                "dimension_scores": {},
+            },
+            gaps=[
+                {"id": "1", "project_id": "test", "dimension": "testing", "description": "No tests", "current_state": "None", "target_state": "Tests exist", "priority": "critical"},
+            ],
+            user_goals=[],
+        )
+        return {"success": True, "tasks": len(result.get("recommended_tasks", []))}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return {"success": False, "error": str(e)}
+
+
 # ---- Projects ----
 
 @app.post("/api/projects/import")
@@ -320,6 +347,7 @@ async def plan_upgrades(project_id: str, db: AsyncSession = Depends(get_db)):
     gap_repo = GapRepository(db)
     task_repo = TaskRepository(db)
     
+    # Get all data in single transaction
     assessment = await assessment_repo.get_latest(project_id)
     facts = await fact_repo.get_latest(project_id)
     gaps = await gap_repo.get_for_project(project_id)
@@ -327,28 +355,56 @@ async def plan_upgrades(project_id: str, db: AsyncSession = Depends(get_db)):
     if not assessment or not facts:
         raise HTTPException(status_code=400, detail="Project must be audited first")
     
-    # Generate plan
+    # Safely extract dimension scores
+    dim_scores = {}
+    if assessment.dimension_scores:
+        for k, v in assessment.dimension_scores.items():
+            if isinstance(v, dict):
+                dim_scores[k] = {k2: v2 for k2, v2 in v.items() if not k2.startswith('_')}
+            else:
+                dim_scores[k] = v
+    
+    # Generate plan - this doesn't need the DB
     result = planner.plan(
         project_facts={
-            "main_language": facts.languages,
-            "frameworks": facts.frameworks,
-            "database": facts.databases,
-            "project_type": facts.project_type,
+            "main_language": facts.languages or [],
+            "frameworks": facts.frameworks or [],
+            "database": facts.databases or [],
+            "project_type": facts.project_type or "other",
         },
         maturity_assessment={
-            "overall_level": assessment.overall_level,
-            "dimension_scores": assessment.dimension_scores,
+            "overall_level": assessment.overall_level or "idea",
+            "dimension_scores": dim_scores,
         },
         gaps=[g.to_dict() for g in gaps],
         user_goals=[],
     )
     
-    # Save tasks
+    # Save tasks one by one, each with its own try/except
+    task_ids = []
     for task_data in result["recommended_tasks"]:
         task_data["project_id"] = project_id
-        await task_repo.create(task_data)
+        try:
+            task = await task_repo.create(task_data)
+            task_ids.append(task.id)
+        except Exception as e:
+            print(f"Warning: Failed to save task: {e}")
+            continue
     
-    return result
+    # Return only serializable data
+    return {
+        "recommended_tasks": [
+            {k: v for k, v in t.items() if not k.startswith('_')}
+            for t in result["recommended_tasks"]
+        ],
+        "prioritization_rationale": result.get("prioritization_rationale", ""),
+        "immediate_next_steps": result.get("immediate_next_steps", []),
+        "estimated_total_effort": result.get("estimated_total_effort", ""),
+        "current_level": result.get("current_level", "idea"),
+        "target_level": result.get("target_level", "demo"),
+        "upgrade_path": result.get("upgrade_path", []),
+        "tasks_saved": len(task_ids),
+    }
 
 
 @app.get("/api/projects/{project_id}/tasks")
@@ -645,6 +701,92 @@ async def start_interview(project_id: str, db: AsyncSession = Depends(get_db)):
             }
             for g in result.gap_analysis
         ],
+    }
+
+
+@app.get("/api/interviews/{session_id}")
+async def get_interview_session(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Get interview session details"""
+    interview_repo = InterviewRepository(db)
+    session = await interview_repo.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    questions = await interview_repo.get_session_questions(session_id)
+
+    return {
+        "session_id": session.id,
+        "project_id": session.project_id,
+        "status": session.status,
+        "questions": [q.to_dict() for q in questions],
+        "created_at": session.created_at.isoformat() if session.created_at else None,
+    }
+
+
+@app.post("/api/interviews/{session_id}/answers")
+async def submit_interview_answer(
+    session_id: str,
+    answer_data: InterviewAnswerRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit an answer to an interview question"""
+    interview_repo = InterviewRepository(db)
+
+    session = await interview_repo.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Interview session not found")
+
+    # Save the answer
+    answer = await interview_repo.create_answer({
+        "session_id": session_id,
+        "question_id": answer_data.question_id,
+        "answer": answer_data.answer,
+    })
+
+    # Generate follow-up if any
+    engine = InterviewEngine()
+    follow_up = engine.generate_follow_up(
+        question_id=answer_data.question_id,
+        user_answer=answer_data.answer,
+        session_id=session_id,
+    )
+
+    result = {
+        "answer_id": answer.id,
+        "submitted": True,
+    }
+
+    if follow_up:
+        # Save follow-up question
+        new_q = await interview_repo.create_question({
+            "session_id": session_id,
+            "question": follow_up.question,
+            "context": follow_up.context,
+            "follow_ups": follow_up.follow_ups,
+            "gap_type": follow_up.gap_type,
+            "parent_question_id": answer_data.question_id,
+        })
+        result["next_question"] = new_q.to_dict()
+
+    return result
+
+
+@app.get("/api/interviews/{session_id}/gaps")
+async def get_interview_gaps(session_id: str, db: AsyncSession = Depends(get_db)):
+    """Get gaps identified during interview"""
+    interview_repo = InterviewRepository(db)
+
+    gaps = await interview_repo.get_session_gaps(session_id)
+
+    return {
+        "gaps": [
+            {
+                "gap_type": g.gap_type,
+                "description": g.description,
+                "severity": g.severity,
+            }
+            for g in gaps
+        ]
     }
 
 

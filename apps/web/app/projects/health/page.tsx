@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, Suspense, useCallback } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 
-export default function HealthPage() {
+function HealthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const projectId = searchParams.get('project_id')
@@ -24,7 +24,6 @@ export default function HealthPage() {
       if (!response.ok) throw new Error('Project not found')
       const project = await response.json()
       
-      // Fetch latest audit
       const auditResponse = await fetch(`/api/projects/${projectId}/audit`)
       if (auditResponse.ok) {
         const auditData = await auditResponse.json()
@@ -33,7 +32,6 @@ export default function HealthPage() {
           ...auditData,
         })
       } else {
-        // No audit yet, set project data
         setData({ project })
       }
     } catch (err: any) {
@@ -86,28 +84,6 @@ export default function HealthPage() {
           >
             去导入
           </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="max-w-6xl">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2 mb-8"></div>
-          <div className="h-64 bg-gray-200 rounded"></div>
-        </div>
-      </div>
-    )
-  }
-
-  if (error && !data) {
-    return (
-      <div className="max-w-6xl">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6">
-          <p className="text-red-700">{error}</p>
         </div>
       </div>
     )
@@ -171,7 +147,6 @@ export default function HealthPage() {
         </div>
       ) : (
         <>
-          {/* Overall Maturity */}
           <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
             <h2 className="text-xl font-semibold mb-6">整体成熟度</h2>
             
@@ -207,7 +182,6 @@ export default function HealthPage() {
             </div>
           </div>
 
-          {/* Dimension Scores */}
           {Object.keys(dimensionScores).length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
               <h2 className="text-xl font-semibold mb-6">维度评分</h2>
@@ -237,7 +211,6 @@ export default function HealthPage() {
             </div>
           )}
 
-          {/* Identified Gaps */}
           {gaps.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
               <h2 className="text-xl font-semibold mb-6">识别的缺口 ({gaps.length})</h2>
@@ -271,7 +244,6 @@ export default function HealthPage() {
             </div>
           )}
 
-          {/* Project Stats */}
           {projectFacts.total_files > 0 && (
             <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
               <h2 className="text-xl font-semibold mb-6">项目统计</h2>
@@ -298,7 +270,6 @@ export default function HealthPage() {
             </div>
           )}
 
-          {/* Next Steps */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-8">
             <h2 className="text-xl font-semibold mb-4">下一步</h2>
             <ul className="space-y-3">
@@ -332,5 +303,21 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
       <p className="text-3xl font-bold text-gray-900">{value}</p>
       <p className="text-sm text-gray-500 mt-1">{label}</p>
     </div>
+  )
+}
+
+export default function HealthPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-6xl">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2 mb-8"></div>
+          <div className="h-64 bg-gray-200 rounded"></div>
+        </div>
+      </div>
+    }>
+      <HealthContent />
+    </Suspense>
   )
 }

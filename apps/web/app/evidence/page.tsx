@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-export default function EvidencePage() {
+function EvidenceContent() {
   const searchParams = useSearchParams()
   const projectId = searchParams.get('project_id')
   
@@ -20,14 +20,12 @@ export default function EvidencePage() {
       }
 
       try {
-        // Fetch project info
         const projectResponse = await fetch(`/api/projects/${projectId}`)
         if (projectResponse.ok) {
           const project = await projectResponse.json()
           setProjectName(project.name)
         }
 
-        // Fetch evidence
         const evidenceResponse = await fetch(`/api/projects/${projectId}/evidence`)
         if (evidenceResponse.ok) {
           const data = await evidenceResponse.json()
@@ -48,17 +46,6 @@ export default function EvidencePage() {
       <div className="max-w-6xl">
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
           <p className="text-yellow-800">请先选择一个项目</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="max-w-6xl">
-        <div className="animate-pulse">
-          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2 mb-8"></div>
         </div>
       </div>
     )
@@ -102,7 +89,6 @@ export default function EvidencePage() {
         </div>
       ) : (
         <>
-          {/* Evidence Summary */}
           <div className="bg-white rounded-xl shadow-sm p-8 mb-8">
             <h2 className="text-xl font-semibold mb-6">证据统计</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -115,7 +101,6 @@ export default function EvidencePage() {
             </div>
           </div>
 
-          {/* Evidence by Type */}
           {Object.entries(evidenceByType).map(([type, items]) => (
             <div key={type} className="mb-8">
               <h3 className="text-lg font-semibold mb-4">{typeLabels[type] || type} ({(items as any[]).length})</h3>
@@ -148,7 +133,6 @@ export default function EvidencePage() {
         </>
       )}
 
-      {/* Info Box */}
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
         <h3 className="font-semibold text-blue-800 mb-2">关于证据墙</h3>
         <p className="text-blue-700 text-sm">
@@ -157,5 +141,20 @@ export default function EvidencePage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function EvidencePage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-6xl">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2 mb-8"></div>
+        </div>
+      </div>
+    }>
+      <EvidenceContent />
+    </Suspense>
   )
 }

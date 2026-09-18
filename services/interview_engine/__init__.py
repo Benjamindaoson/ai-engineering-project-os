@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
-from packages.contracts.models import (
+from packages.contracts import (
     ProjectFacts, ExecutionRecord, ArchitectureDecision,
     InterviewSession, InterviewQuestion, MaturityLevel
 )

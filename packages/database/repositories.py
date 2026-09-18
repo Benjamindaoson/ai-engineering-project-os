@@ -520,3 +520,25 @@ class InterviewRepository:
             .values(user_answer=answer, status="answered")
         )
         await self.session.commit()
+
+    async def get_session_questions(self, session_id: str) -> List[InterviewQuestion]:
+        """Get all questions for a session"""
+        result = await self.session.execute(
+            select(InterviewQuestion)
+            .where(InterviewQuestion.session_id == session_id)
+            .order_by(InterviewQuestion.id)
+        )
+        return list(result.scalars().all())
+
+    async def get_session_gaps(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get gaps identified during interview"""
+        questions = await self.get_session_questions(session_id)
+        gaps = []
+        for q in questions:
+            if q.gap_type and q.user_answer:
+                gaps.append({
+                    "gap_type": q.gap_type,
+                    "description": f"Question about {q.gap_type}: {q.question[:100]}",
+                    "severity": "medium",
+                })
+        return gaps

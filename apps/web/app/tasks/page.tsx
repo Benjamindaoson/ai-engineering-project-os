@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 
-export default function TasksPage() {
+function TasksContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const taskId = searchParams.get('task_id')
@@ -16,7 +16,7 @@ export default function TasksPage() {
   const [executionResult, setExecutionResult] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'details' | 'mentor' | 'execute'>('details')
 
-  const fetchTask = useCallback(async () => {
+  const fetchTask = async () => {
     if (!taskId) {
       setLoading(false)
       return
@@ -32,11 +32,11 @@ export default function TasksPage() {
     } finally {
       setLoading(false)
     }
-  }, [taskId])
+  }
 
   useEffect(() => {
     fetchTask()
-  }, [fetchTask])
+  }, [taskId])
 
   const handleExecute = async () => {
     if (!taskId) return
@@ -56,8 +56,6 @@ export default function TasksPage() {
       
       const result = await response.json()
       setExecutionResult(result)
-      
-      // Refresh task to get updated status
       await fetchTask()
     } catch (err: any) {
       setError(err.message)
@@ -124,7 +122,6 @@ export default function TasksPage() {
         <p className="text-gray-600">{task?.description}</p>
       </div>
 
-      {/* Status Bar */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
@@ -161,7 +158,6 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Execution Result */}
       {executionResult && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-6 mb-8">
           <h3 className="font-semibold text-green-800 mb-4">
@@ -178,7 +174,6 @@ export default function TasksPage() {
         </div>
       )}
 
-      {/* Tabs */}
       <div className="bg-white rounded-xl shadow-sm overflow-hidden">
         <div className="border-b">
           <nav className="flex">
@@ -342,5 +337,20 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
     >
       {children}
     </button>
+  )
+}
+
+export default function TasksPage() {
+  return (
+    <Suspense fallback={
+      <div className="max-w-6xl">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 rounded w-1/3 mb-4"></div>
+          <div className="h-4 bg-gray-200 rounded w-1/2 mb-8"></div>
+        </div>
+      </div>
+    }>
+      <TasksContent />
+    </Suspense>
   )
 }
