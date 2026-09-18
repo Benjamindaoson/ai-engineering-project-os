@@ -91,3 +91,6 @@ data/benchmarks/*.csv
 
 # Test fixtures
 tests/fixtures/
+
+# Workspaces (runtime generated project copies)
+workspaces/
