@@ -672,12 +672,44 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
 
         # Create ProjectVersion
         files_changed = [c.get("file_path", "") for c in (execution.changes or [])]
+
+        # Perform RE-AUDIT to get new maturity after changes
+        project_path = project.local_path if project else ""
+        new_maturity = current_maturity
+        new_gaps = []
+
+        if project_path and os.path.exists(project_path):
+            try:
+                # Run re-audit on the modified project
+                re_audit_result = auditor.audit(
+                    project_path=project_path,
+                    project_id=task.project_id,
+                    github_url=project.github_url if project else None,
+                )
+                new_maturity = re_audit_result.get("maturity_assessment", {}).get("overall_level", current_maturity)
+
+                # Update gaps based on new assessment
+                gap_repo = GapRepository(db)
+                await gap_repo.delete_for_project(task.project_id)
+                for g in re_audit_result.get("gaps", []):
+                    g["project_id"] = task.project_id
+                await gap_repo.create_batch(re_audit_result.get("gaps", []))
+                new_gaps = re_audit_result.get("gaps", [])
+
+                # Update project's current maturity
+                await project_repo.update_maturity(task.project_id, new_maturity)
+
+            except Exception as audit_error:
+                # If re-audit fails, keep old maturity
+                response["re_audit_warning"] = str(audit_error)
+
+        # Create version with new maturity
         version = await version_repo.create({
             "project_id": task.project_id,
             "title": f"Completed: {task.title}",
             "description": task.description or "",
             "maturity_before": current_maturity,
-            "maturity_after": current_maturity,  # TODO: recalculate after re-audit
+            "maturity_after": new_maturity,
             "files_changed": files_changed,
         })
 
@@ -687,6 +719,10 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
         response["evidence_ids"] = evidence_ids
         response["version_id"] = version.id
         response["project_version_created"] = True
+        response["maturity_before"] = current_maturity
+        response["maturity_after"] = new_maturity
+        response["gaps_after_re_audit"] = new_gaps
+        response["maturity_changed"] = new_maturity != current_maturity
 
     return response
 

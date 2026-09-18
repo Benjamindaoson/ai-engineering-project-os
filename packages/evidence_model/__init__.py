@@ -8,7 +8,7 @@ Evidence is the foundation of all maturity assessments - every claim must be bac
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 
 class EvidenceType(str, Enum):
@@ -245,7 +245,7 @@ def build_evidence_packet(
     candidates: list[dict[str, Any]],
     *,
     min_score: float = 0.0,
-    blocked_filter: callable | None = None,
+    blocked_filter: Callable | None = None,
 ) -> EvidencePacket:
     """
     Build an EvidencePacket from candidate evidence.

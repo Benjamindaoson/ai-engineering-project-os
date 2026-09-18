@@ -1,0 +1,57 @@
+[
+  {
+    "project": "AIEduRAG",
+    "status": "success",
+    "import_path": "workspaces\\307d11da-394c-4270-9ef8-7f86b5cbfb64",
+    "maturity": "mvp",
+    "files": 186,
+    "code_lines": 14437,
+    "test_files": 42,
+    "frameworks": [
+      "nextjs",
+      "fastapi",
+      "nestjs",
+      "langchain",
+      "llamaindex"
+    ],
+    "gaps": 1,
+    "tasks": 1
+  },
+  {
+    "project": "enterprise-data-agent",
+    "status": "success",
+    "import_path": "workspaces\\eb1d646e-c966-4586-92a0-50aea236b43f",
+    "maturity": "mvp",
+    "files": 378,
+    "code_lines": 38351,
+    "test_files": 43,
+    "frameworks": [
+      "vue",
+      "fastapi",
+      "django",
+      "nestjs",
+      "langchain"
+    ],
+    "gaps": 1,
+    "tasks": 1
+  },
+  {
+    "project": "SalesBoost",
+    "status": "success",
+    "import_path": "workspaces\\edfc6fc6-4a3b-49c3-93ed-d1fce7892467",
+    "maturity": "mvp",
+    "files": 1424,
+    "code_lines": 167189,
+    "test_files": 119,
+    "frameworks": [
+      "nextjs",
+      "react",
+      "fastapi",
+      "django",
+      "express",
+      "langchain"
+    ],
+    "gaps": 1,
+    "tasks": 1
+  }
+]
