@@ -5,11 +5,13 @@ Tests for Database Layer - Real persistence
 import os
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 import tempfile
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 
 @pytest.fixture
@@ -118,7 +120,7 @@ class TestGapRepository:
     
     async def test_create_gaps(self, test_db):
         """Test creating gaps"""
-        from packages.database.repositories import ProjectRepository, GapRepository
+        from packages.database.repositories import GapRepository, ProjectRepository
         
         async with test_db() as session:
             project_repo = ProjectRepository(session)

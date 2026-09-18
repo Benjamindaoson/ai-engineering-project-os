@@ -5,9 +5,9 @@ Shared data models and type definitions for the AI Engineering Project OS.
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from enum import Enum
+from typing import Any
 
 
 class ProjectType(str, Enum):
@@ -62,10 +62,10 @@ class ProjectFacts:
     """Facts extracted from a project during audit"""
     project_name: str = ""
     project_type: ProjectType = ProjectType.OTHER
-    main_language: List[str] = field(default_factory=list)
-    frameworks: List[str] = field(default_factory=list)
-    database: List[str] = field(default_factory=list)
-    deployment: List[str] = field(default_factory=list)
+    main_language: list[str] = field(default_factory=list)
+    frameworks: list[str] = field(default_factory=list)
+    database: list[str] = field(default_factory=list)
+    deployment: list[str] = field(default_factory=list)
     
     # Code metrics
     total_files: int = 0
@@ -82,12 +82,12 @@ class ProjectFacts:
     has_contributing: bool = False
     
     # Implementation status by category
-    implementation_status: Dict[str, List[Dict[str, Any]]] = field(default_factory=dict)
+    implementation_status: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     
     # Raw observations
-    raw_observations: List[Dict[str, Any]] = field(default_factory=list)
+    raw_observations: list[dict[str, Any]] = field(default_factory=list)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "project_name": self.project_name,
             "project_type": self.project_type.value if isinstance(self.project_type, Enum) else self.project_type,
@@ -126,10 +126,10 @@ class Gap:
     priority: GapPriority = GapPriority.MEDIUM
     effort_estimate: EffortEstimate = EffortEstimate.MEDIUM
     risk: GapRisk = GapRisk.MEDIUM
-    related_criteria: List[str] = field(default_factory=list)
+    related_criteria: list[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "project_id": self.project_id,
@@ -160,9 +160,9 @@ class LearningContent:
     recommended_solution: str = ""
     reasoning: str = ""
     verification_method: str = ""
-    interview_questions: List[str] = field(default_factory=list)
+    interview_questions: list[str] = field(default_factory=list)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "problem_explanation": self.problem_explanation,
             "why_important": self.why_important,
@@ -193,14 +193,14 @@ class UpgradeTask:
     title: str
     description: str
     learning_content: LearningContent
-    completion_criteria: List[CompletionCriterion] = field(default_factory=list)
+    completion_criteria: list[CompletionCriterion] = field(default_factory=list)
     estimated_effort: str = ""
-    prerequisites: List[str] = field(default_factory=list)
+    prerequisites: list[str] = field(default_factory=list)
     status: TaskStatus = TaskStatus.PENDING
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    completed_at: Optional[str] = None
+    completed_at: str | None = None
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "project_id": self.project_id,
@@ -239,16 +239,16 @@ class TestResult:
     test_name: str
     passed: bool
     duration_ms: float
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
 class BenchmarkResult:
     """Result of a benchmark"""
     metric: str
-    before_value: Optional[float] = None
-    after_value: Optional[float] = None
-    improvement: Optional[float] = None
+    before_value: float | None = None
+    after_value: float | None = None
+    improvement: float | None = None
     unit: str = ""
 
 
@@ -258,16 +258,16 @@ class ExecutionRecord:
     id: str
     task_id: str
     project_id: str
-    changes: List[CodeChange] = field(default_factory=list)
+    changes: list[CodeChange] = field(default_factory=list)
     execution_log: str = ""
-    test_results: List[TestResult] = field(default_factory=list)
-    benchmark_results: List[BenchmarkResult] = field(default_factory=list)
+    test_results: list[TestResult] = field(default_factory=list)
+    benchmark_results: list[BenchmarkResult] = field(default_factory=list)
     status: TaskStatus = TaskStatus.PENDING
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    completed_at: Optional[str] = None
-    error: Optional[str] = None
+    completed_at: str | None = None
+    error: str | None = None
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "task_id": self.task_id,
@@ -302,15 +302,15 @@ class ArchitectureDecision:
     """A recorded architecture decision"""
     id: str
     project_id: str
-    task_id: Optional[str]
+    task_id: str | None
     title: str
     context: str
     decision: str
     consequences: str
-    alternatives_considered: List[str] = field(default_factory=list)
+    alternatives_considered: list[str] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "project_id": self.project_id,
@@ -335,13 +335,13 @@ class InterviewQuestion:
     session_id: str
     question: str
     context: str
-    user_answer: Optional[str] = None
-    follow_ups: List[str] = field(default_factory=list)
+    user_answer: str | None = None
+    follow_ups: list[str] = field(default_factory=list)
     current_follow_up: int = 0
-    gap_type: Optional[str] = None  # "knowledge", "engineering", "evidence", "experiment"
+    gap_type: str | None = None  # "knowledge", "engineering", "evidence", "experiment"
     status: str = "pending"
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "session_id": self.session_id,
@@ -360,13 +360,13 @@ class InterviewSession:
     """A complete interview session"""
     id: str
     project_id: str
-    task_id: Optional[str]
-    questions: List[InterviewQuestion] = field(default_factory=list)
+    task_id: str | None
+    questions: list[InterviewQuestion] = field(default_factory=list)
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    ended_at: Optional[str] = None
+    ended_at: str | None = None
     status: str = "in_progress"  # "in_progress", "completed"
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "project_id": self.project_id,
@@ -387,7 +387,7 @@ class InterviewPerformance:
     """Interview performance metrics"""
     total_questions: int = 0
     answered_correctly: int = 0
-    gaps: List[str] = field(default_factory=list)
+    gaps: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -395,7 +395,7 @@ class DimensionCapability:
     """Capability in a specific dimension"""
     dimension: str
     level: str
-    evidence_ids: List[str] = field(default_factory=list)
+    evidence_ids: list[str] = field(default_factory=list)
     interview_performance: InterviewPerformance = field(default_factory=InterviewPerformance)
 
 
@@ -404,13 +404,13 @@ class CapabilityProfile:
     """Complete capability profile for a user on a project"""
     user_id: str
     project_id: str
-    capabilities: List[DimensionCapability] = field(default_factory=list)
+    capabilities: list[DimensionCapability] = field(default_factory=list)
     overall_score: float = 0.0
-    strengths: List[str] = field(default_factory=list)
-    weaknesses: List[str] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    weaknesses: list[str] = field(default_factory=list)
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "user_id": self.user_id,
             "project_id": self.project_id,

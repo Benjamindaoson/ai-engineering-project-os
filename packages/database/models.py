@@ -4,14 +4,23 @@ Database Package
 SQLite-based persistence layer for the AI Engineering Project OS.
 """
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy import Column, String, Integer, Float, Boolean, DateTime, Text, JSON, ForeignKey
-from sqlalchemy.orm import relationship
-from datetime import datetime
-from typing import Optional, Dict, Any
 import os
+from datetime import datetime
+from typing import Any
 
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import DeclarativeBase, relationship
 
 # Database URL
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/ai_engineering.db")
@@ -19,7 +28,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/ai_engineer
 
 class Base(DeclarativeBase):
     """Base class for all database models"""
-    pass
 
 
 # ============================================================================
@@ -147,7 +155,7 @@ class Gap(Base):
     project = relationship("Project", back_populates="gaps")
     tasks = relationship("EngineeringTask", back_populates="gap")
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             "id": self.id,
@@ -246,11 +254,14 @@ class VerificationResult(Base):
 class Evidence(Base):
     """Evidence record"""
     __tablename__ = "evidence"
-    
+
     id = Column(String(36), primary_key=True)
     project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
     version_id = Column(String(36), ForeignKey("project_versions.id"), nullable=True)
-    
+    verification_id = Column(String(36), nullable=True)
+    task_id = Column(String(36), nullable=True)
+    execution_id = Column(String(36), nullable=True)
+
     evidence_type = Column(String(50), nullable=False)
     source_path = Column(String(1000), nullable=False)
     title = Column(String(500), default="")
@@ -259,9 +270,9 @@ class Evidence(Base):
     line_start = Column(Integer, nullable=True)
     line_end = Column(Integer, nullable=True)
     score = Column(Float, default=0.0)
-    
+
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     # Relationships
     project = relationship("Project")
     version = relationship("ProjectVersion", back_populates="evidence")
@@ -333,7 +344,7 @@ class InterviewQuestion(Base):
     assessments = relationship("InterviewAssessment", back_populates="question")
     gaps = relationship("InterviewGap", back_populates="question")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary"""
         return {
             "id": self.id,
@@ -368,7 +379,7 @@ class InterviewAnswer(Base):
     session = relationship("InterviewSession", back_populates="answers")
     question = relationship("InterviewQuestion")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "session_id": self.session_id,
@@ -409,7 +420,7 @@ class InterviewAssessment(Base):
     question = relationship("InterviewQuestion")
     answer = relationship("InterviewAnswer")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "session_id": self.session_id,
@@ -453,7 +464,7 @@ class InterviewGap(Base):
     project = relationship("Project")
     question = relationship("InterviewQuestion")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "session_id": self.session_id,

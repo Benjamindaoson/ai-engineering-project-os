@@ -9,12 +9,15 @@ import os
 import re
 import subprocess
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from packages.contracts.models import (
-    UpgradeTask, ExecutionRecord, CompletionCriterion,
-    TaskStatus, TestResult
+    CompletionCriterion,
+    ExecutionRecord,
+    TaskStatus,
+    TestResult,
+    UpgradeTask,
 )
 from packages.evidence_model import Evidence, EvidenceType
 
@@ -24,7 +27,7 @@ class VerificationResult:
     """Result of verifying a single criterion"""
     criterion: str
     status: str  # "passed", "failed", "partial", "unverifiable"
-    evidence: List[Dict[str, Any]] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
     details: str = ""
 
 
@@ -32,12 +35,12 @@ class VerificationResult:
 class VerificationOutput:
     """Complete verification output"""
     task_id: str
-    verification_results: List[VerificationResult]
+    verification_results: list[VerificationResult]
     overall_status: str  # "passed", "partial", "failed", "unverifiable"
-    missing_evidence: List[Dict[str, str]] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
+    missing_evidence: list[dict[str, str]] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "verification_results": [
@@ -93,8 +96,8 @@ class VerificationEngine:
         Returns:
             VerificationOutput with detailed results
         """
-        results: List[VerificationResult] = []
-        missing_evidence: List[Dict[str, str]] = []
+        results: list[VerificationResult] = []
+        missing_evidence: list[dict[str, str]] = []
         
         for criterion in task.completion_criteria:
             result = self._verify_criterion(
@@ -160,7 +163,7 @@ class VerificationEngine:
         project_path: str,
     ) -> VerificationResult:
         """Verify code implementation exists"""
-        evidence: List[Dict[str, Any]] = []
+        evidence: list[dict[str, Any]] = []
         passed = False
         details_parts = []
         
@@ -207,7 +210,7 @@ class VerificationEngine:
         project_path: str,
     ) -> VerificationResult:
         """Verify tests exist and pass"""
-        evidence: List[Dict[str, Any]] = []
+        evidence: list[dict[str, Any]] = []
         passed_count = 0
         failed_count = 0
         
@@ -272,7 +275,7 @@ class VerificationEngine:
         project_path: str,
     ) -> VerificationResult:
         """Verify command execution results"""
-        evidence: List[Dict[str, Any]] = []
+        evidence: list[dict[str, Any]] = []
         
         # Check execution log
         if execution_record.execution_log:
@@ -311,7 +314,7 @@ class VerificationEngine:
         project_path: str,
     ) -> VerificationResult:
         """Verify benchmark results"""
-        evidence: List[Dict[str, Any]] = []
+        evidence: list[dict[str, Any]] = []
         
         if execution_record.benchmark_results:
             for br in execution_record.benchmark_results:
@@ -345,7 +348,7 @@ class VerificationEngine:
         project_path: str,
     ) -> VerificationResult:
         """Verify configuration files exist"""
-        evidence: List[Dict[str, Any]] = []
+        evidence: list[dict[str, Any]] = []
         
         # Look for config files in changes
         config_changes = [c for c in execution_record.changes 
@@ -394,7 +397,7 @@ class VerificationEngine:
         self,
         project_path: str,
         criterion: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """Find files related to a criterion"""
         related = []
         keywords = criterion.lower().split()
@@ -409,7 +412,7 @@ class VerificationEngine:
         
         return related[:10]  # Limit to 10
     
-    def _run_tests(self, project_path: str) -> List[TestResult]:
+    def _run_tests(self, project_path: str) -> list[TestResult]:
         """Run tests in project"""
         results = []
         
@@ -469,9 +472,9 @@ class VerificationEngine:
     
     def _generate_recommendations(
         self,
-        results: List[VerificationResult],
-        missing: List[Dict[str, str]],
-    ) -> List[str]:
+        results: list[VerificationResult],
+        missing: list[dict[str, str]],
+    ) -> list[str]:
         """Generate recommendations based on verification results"""
         recommendations = []
         

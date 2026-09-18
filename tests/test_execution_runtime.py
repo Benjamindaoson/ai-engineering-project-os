@@ -2,16 +2,22 @@
 Tests for Execution Runtime - Real execution
 """
 
-import os
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 import tempfile
 
-from packages.contracts.models import UpgradeTask, LearningContent, CompletionCriterion, TaskStatus
-from services.execution_runtime import ExecutionRuntime, ExecutionConfig
+import pytest
+
+from packages.contracts.models import (
+    CompletionCriterion,
+    LearningContent,
+    TaskStatus,
+    UpgradeTask,
+)
+from services.execution_runtime import ExecutionConfig, ExecutionRuntime
 
 
 @pytest.fixture

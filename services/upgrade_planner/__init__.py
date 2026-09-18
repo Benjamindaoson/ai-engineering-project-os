@@ -6,12 +6,18 @@ Responsible for determining the next best upgrade tasks based on project state a
 
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from packages.contracts import (
-    Gap, UpgradeTask, LearningContent, CompletionCriterion,
-    GapPriority, EffortEstimate, GapRisk, TaskStatus,
-    MaturityLevel
+    CompletionCriterion,
+    EffortEstimate,
+    Gap,
+    GapPriority,
+    GapRisk,
+    LearningContent,
+    MaturityLevel,
+    TaskStatus,
+    UpgradeTask,
 )
 from packages.maturity_model import MaturityEvaluator
 
@@ -21,7 +27,7 @@ class TaskRecommendation:
     """A recommended task with reasoning"""
     task: UpgradeTask
     reasoning: str
-    dependencies: List[str] = field(default_factory=list)
+    dependencies: list[str] = field(default_factory=list)
 
 
 class UpgradePlanner:
@@ -37,12 +43,12 @@ class UpgradePlanner:
     
     def plan(
         self,
-        project_facts: Dict[str, Any],
-        maturity_assessment: Dict[str, Any],
-        gaps: List[Dict[str, Any]],
-        user_goals: List[str],
-        constraints: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        project_facts: dict[str, Any],
+        maturity_assessment: dict[str, Any],
+        gaps: list[dict[str, Any]],
+        user_goals: list[str],
+        constraints: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Generate an upgrade plan.
         
@@ -131,7 +137,7 @@ class UpgradePlanner:
     def _determine_target_level(
         self,
         current: MaturityLevel,
-        user_target: Optional[str]
+        user_target: str | None
     ) -> MaturityLevel:
         """Determine the target maturity level"""
         if user_target:
@@ -151,11 +157,11 @@ class UpgradePlanner:
     
     def _generate_tasks(
         self,
-        gaps: List[Gap],
-        facts: Dict[str, Any],
+        gaps: list[Gap],
+        facts: dict[str, Any],
         current: MaturityLevel,
         target: MaturityLevel,
-    ) -> List[UpgradeTask]:
+    ) -> list[UpgradeTask]:
         """Generate upgrade tasks for gaps"""
         tasks = []
         
@@ -169,10 +175,10 @@ class UpgradePlanner:
     def _create_task_for_gap(
         self,
         gap: Gap,
-        facts: Dict[str, Any],
+        facts: dict[str, Any],
         current: MaturityLevel,
         target: MaturityLevel,
-    ) -> Optional[UpgradeTask]:
+    ) -> UpgradeTask | None:
         """Create an upgrade task for a gap"""
         # Generate learning content based on gap type
         learning = self._generate_learning_content(gap, facts)
@@ -201,7 +207,7 @@ class UpgradePlanner:
     def _generate_learning_content(
         self,
         gap: Gap,
-        facts: Dict[str, Any]
+        facts: dict[str, Any]
     ) -> LearningContent:
         """Generate learning content for a gap"""
         dimension = gap.dimension
@@ -308,7 +314,7 @@ class UpgradePlanner:
             ],
         )
     
-    def _generate_criteria(self, gap: Gap) -> List[CompletionCriterion]:
+    def _generate_criteria(self, gap: Gap) -> list[CompletionCriterion]:
         """Generate completion criteria for a task"""
         dimension = gap.dimension
         
@@ -404,7 +410,7 @@ class UpgradePlanner:
         
         return effort_map.get(effort, "1-3天")
     
-    def _get_prerequisites(self, gap: Gap, facts: Dict[str, Any]) -> List[str]:
+    def _get_prerequisites(self, gap: Gap, facts: dict[str, Any]) -> list[str]:
         """Get prerequisites for a task"""
         # In a real implementation, this would analyze dependencies
         # For now, return empty
@@ -412,10 +418,10 @@ class UpgradePlanner:
     
     def _prioritize_tasks(
         self,
-        tasks: List[UpgradeTask],
+        tasks: list[UpgradeTask],
         skill_level: str,
-        time_available: Optional[str],
-    ) -> List[UpgradeTask]:
+        time_available: str | None,
+    ) -> list[UpgradeTask]:
         """Prioritize tasks based on various factors"""
         # Score each task
         scored_tasks = []
@@ -460,10 +466,10 @@ class UpgradePlanner:
     
     def _generate_rationale(
         self,
-        tasks: List[UpgradeTask],
+        tasks: list[UpgradeTask],
         current: MaturityLevel,
         target: MaturityLevel,
-        goals: List[str],
+        goals: list[str],
     ) -> str:
         """Generate explanation for why these tasks were chosen"""
         rationale_parts = [
@@ -487,7 +493,7 @@ class UpgradePlanner:
         
         return "\n".join(rationale_parts)
     
-    def _determine_next_steps(self, tasks: List[UpgradeTask]) -> List[str]:
+    def _determine_next_steps(self, tasks: list[UpgradeTask]) -> list[str]:
         """Determine immediate next steps"""
         steps = []
         
@@ -503,7 +509,7 @@ class UpgradePlanner:
         
         return steps
     
-    def _estimate_total_effort(self, tasks: List[UpgradeTask]) -> str:
+    def _estimate_total_effort(self, tasks: list[UpgradeTask]) -> str:
         """Estimate total effort for all tasks"""
         if not tasks:
             return "无法估计"

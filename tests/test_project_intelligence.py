@@ -2,10 +2,10 @@
 Tests for Project Intelligence - Real scanning without mocks
 """
 
-import os
 import sys
-import pytest
 from pathlib import Path
+
+import pytest
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -15,7 +15,6 @@ from packages.project_intelligence import (
     build_project_facts,
     generate_observations,
 )
-
 
 # Use AIEduRAG as test project
 TEST_PROJECT = Path("D:/AI_Engineering _Project_OS/_sources/AIEduRAG")

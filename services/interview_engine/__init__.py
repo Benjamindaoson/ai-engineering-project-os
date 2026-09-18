@@ -7,11 +7,15 @@ decisions, and experiments.
 
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from packages.contracts import (
-    ProjectFacts, ExecutionRecord, ArchitectureDecision,
-    InterviewSession, InterviewQuestion, MaturityLevel
+    ArchitectureDecision,
+    ExecutionRecord,
+    InterviewQuestion,
+    InterviewSession,
+    MaturityLevel,
+    ProjectFacts,
 )
 
 
@@ -20,7 +24,7 @@ class GapAnalysis:
     """Analysis of gaps discovered during interview"""
     gap_type: str  # "knowledge", "engineering", "evidence", "experiment"
     description: str
-    related_task_id: Optional[str] = None
+    related_task_id: str | None = None
     severity: str = "medium"  # "low", "medium", "high"
 
 
@@ -28,10 +32,10 @@ class GapAnalysis:
 class InterviewOutput:
     """Complete interview output"""
     session: InterviewSession
-    initial_questions: List[InterviewQuestion]
-    gap_analysis: List[GapAnalysis]
+    initial_questions: list[InterviewQuestion]
+    gap_analysis: list[GapAnalysis]
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "session": self.session.to_dict(),
             "initial_questions": [q.to_dict() for q in self.initial_questions],
@@ -61,7 +65,7 @@ class InterviewEngine:
     def __init__(self):
         self.question_templates = self._build_question_templates()
     
-    def _build_question_templates(self) -> Dict[str, List[Dict[str, Any]]]:
+    def _build_question_templates(self) -> dict[str, list[dict[str, Any]]]:
         """Build question templates by category"""
         return {
             "architecture": [
@@ -158,10 +162,10 @@ class InterviewEngine:
     
     def conduct_interview(
         self,
-        project_facts: Dict[str, Any],
-        execution_records: List[Dict[str, Any]],
-        architecture_decisions: List[Dict[str, Any]],
-        maturity_assessment: Dict[str, Any],
+        project_facts: dict[str, Any],
+        execution_records: list[dict[str, Any]],
+        architecture_decisions: list[dict[str, Any]],
+        maturity_assessment: dict[str, Any],
         project_id: str,
     ) -> InterviewOutput:
         """
@@ -211,12 +215,12 @@ class InterviewEngine:
     
     def _generate_questions(
         self,
-        facts: Dict[str, Any],
-        records: List[Dict[str, Any]],
-        decisions: List[Dict[str, Any]],
-        maturity: Dict[str, Any],
+        facts: dict[str, Any],
+        records: list[dict[str, Any]],
+        decisions: list[dict[str, Any]],
+        maturity: dict[str, Any],
         session_id: str,
-    ) -> List[InterviewQuestion]:
+    ) -> list[InterviewQuestion]:
         """Generate interview questions"""
         questions = []
         
@@ -241,9 +245,9 @@ class InterviewEngine:
     
     def _generate_intro_questions(
         self,
-        facts: Dict[str, Any],
+        facts: dict[str, Any],
         session_id: str,
-    ) -> List[InterviewQuestion]:
+    ) -> list[InterviewQuestion]:
         """Generate project introduction questions"""
         questions = []
         
@@ -281,9 +285,9 @@ class InterviewEngine:
     
     def _generate_architecture_questions(
         self,
-        decisions: List[Dict[str, Any]],
+        decisions: list[dict[str, Any]],
         session_id: str,
-    ) -> List[InterviewQuestion]:
+    ) -> list[InterviewQuestion]:
         """Generate architecture-related questions"""
         questions = []
         
@@ -306,9 +310,9 @@ class InterviewEngine:
     
     def _generate_implementation_questions(
         self,
-        records: List[Dict[str, Any]],
+        records: list[dict[str, Any]],
         session_id: str,
-    ) -> List[InterviewQuestion]:
+    ) -> list[InterviewQuestion]:
         """Generate implementation-related questions"""
         questions = []
         
@@ -334,9 +338,9 @@ class InterviewEngine:
     
     def _generate_production_questions(
         self,
-        maturity: Dict[str, Any],
+        maturity: dict[str, Any],
         session_id: str,
-    ) -> List[InterviewQuestion]:
+    ) -> list[InterviewQuestion]:
         """Generate production-readiness questions"""
         questions = []
         
@@ -376,9 +380,9 @@ class InterviewEngine:
     
     def _generate_evaluation_questions(
         self,
-        facts: Dict[str, Any],
+        facts: dict[str, Any],
         session_id: str,
-    ) -> List[InterviewQuestion]:
+    ) -> list[InterviewQuestion]:
         """Generate evaluation-related questions"""
         questions = []
         
@@ -405,11 +409,11 @@ class InterviewEngine:
     
     def _analyze_gaps(
         self,
-        facts: Dict[str, Any],
-        records: List[Dict[str, Any]],
-        decisions: List[Dict[str, Any]],
-        questions: List[InterviewQuestion],
-    ) -> List[GapAnalysis]:
+        facts: dict[str, Any],
+        records: list[dict[str, Any]],
+        decisions: list[dict[str, Any]],
+        questions: list[InterviewQuestion],
+    ) -> list[GapAnalysis]:
         """Analyze gaps based on project state"""
         gaps = []
         
@@ -453,7 +457,7 @@ class InterviewEngine:
         self,
         question: InterviewQuestion,
         answer: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Generate a follow-up question based on the user's answer.
         
@@ -471,7 +475,7 @@ class InterviewEngine:
         self,
         question: InterviewQuestion,
         answer: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Evaluate a user's answer.
         
@@ -514,7 +518,7 @@ class InterviewEngine:
             "suggestion": self._get_suggestion(quality, question.gap_type),
         }
     
-    def _get_suggestion(self, quality: str, gap_type: Optional[str]) -> str:
+    def _get_suggestion(self, quality: str, gap_type: str | None) -> str:
         """Get suggestion based on answer quality"""
         if quality == "excellent":
             return "回答非常详细，包含具体数据和例子。"

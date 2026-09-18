@@ -6,15 +6,15 @@ Handles importing projects from local paths or GitHub URLs.
 
 import os
 import re
-import uuid
 import shutil
 import subprocess
+import uuid
 from dataclasses import dataclass
-from typing import Optional, Tuple
-from pathlib import Path
 from datetime import datetime
-import httpx
+from pathlib import Path
+from typing import Optional, Tuple
 
+import httpx
 
 # Configuration
 WORKSPACE_ROOT = os.getenv("WORKSPACE_ROOT", "./workspaces")
@@ -31,7 +31,7 @@ class ImportResult:
     commit_sha: str
     branch: str
     repo_url: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class RepoImportService:
@@ -48,7 +48,7 @@ class RepoImportService:
     def import_local(
         self,
         local_path: str,
-        project_name: Optional[str] = None,
+        project_name: str | None = None,
     ) -> ImportResult:
         """
         Import a project from a local path.
@@ -237,7 +237,7 @@ class RepoImportService:
                 error=str(e),
             )
     
-    def _parse_github_url(self, url: str) -> Optional[Tuple[str, str]]:
+    def _parse_github_url(self, url: str) -> tuple[str, str] | None:
         """Parse GitHub URL to extract owner and repo"""
         # Handle various GitHub URL formats
         patterns = [
@@ -252,7 +252,7 @@ class RepoImportService:
         
         return None
     
-    def _get_git_info(self, repo_path: str) -> Tuple[Optional[str], Optional[str]]:
+    def _get_git_info(self, repo_path: str) -> tuple[str | None, str | None]:
         """Get current commit SHA and branch from git repo"""
         try:
             # Get commit SHA
@@ -316,7 +316,7 @@ class RepoImportService:
             return True
         return False
     
-    def get_workspace_path(self, project_id: str) -> Optional[str]:
+    def get_workspace_path(self, project_id: str) -> str | None:
         """Get workspace path for a project"""
         workspace_path = self.workspace_root / project_id
         if workspace_path.exists():

@@ -7,10 +7,13 @@ and what production considerations apply.
 
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from packages.contracts.models import (
-    UpgradeTask, LearningContent, ProjectFacts, ProjectType
+    LearningContent,
+    ProjectFacts,
+    ProjectType,
+    UpgradeTask,
 )
 
 
@@ -18,11 +21,11 @@ from packages.contracts.models import (
 class MentorOutput:
     """Output from the mentor agent"""
     learning_content: LearningContent
-    code_examples: Optional[List[Dict[str, str]]] = None
-    related_concepts: List[Dict[str, str]] = field(default_factory=list)
-    common_pitfalls: List[str] = field(default_factory=list)
+    code_examples: list[dict[str, str]] | None = None
+    related_concepts: list[dict[str, str]] = field(default_factory=list)
+    common_pitfalls: list[str] = field(default_factory=list)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "learning_content": self.learning_content.to_dict() if isinstance(self.learning_content, LearningContent) else self.learning_content,
             "code_examples": self.code_examples,
@@ -47,7 +50,7 @@ class EngineeringMentor:
     def __init__(self):
         self.concept_library = self._build_concept_library()
     
-    def _build_concept_library(self) -> Dict[str, Dict[str, str]]:
+    def _build_concept_library(self) -> dict[str, dict[str, str]]:
         """Build a library of concept explanations"""
         return {
             "testing": {
@@ -143,7 +146,7 @@ class EngineeringMentor:
     def mentor(
         self,
         task: UpgradeTask,
-        project_context: Dict[str, Any],
+        project_context: dict[str, Any],
     ) -> MentorOutput:
         """
         Provide mentoring for an upgrade task.
@@ -207,7 +210,7 @@ class EngineeringMentor:
         self,
         learning: LearningContent,
         dimension: str,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> LearningContent:
         """Enhance learning content with project-specific details"""
         tech_stack = context.get("tech_stack", [])
@@ -220,7 +223,7 @@ class EngineeringMentor:
         
         return learning
     
-    def _get_stack_specific_advice(self, dimension: str, tech_stack: List[str]) -> str:
+    def _get_stack_specific_advice(self, dimension: str, tech_stack: list[str]) -> str:
         """Get stack-specific implementation advice"""
         advice_map = {
             "python": {
@@ -254,8 +257,8 @@ class EngineeringMentor:
     def _generate_code_examples(
         self,
         dimension: str,
-        context: Dict[str, Any],
-    ) -> Optional[List[Dict[str, str]]]:
+        context: dict[str, Any],
+    ) -> list[dict[str, str]] | None:
         """Generate before/after code examples"""
         examples_map = {
             "testing": [
@@ -283,7 +286,7 @@ class EngineeringMentor:
         
         return examples_map.get(dimension)
     
-    def _get_related_concepts(self, dimension: str) -> List[Dict[str, str]]:
+    def _get_related_concepts(self, dimension: str) -> list[dict[str, str]]:
         """Get related concepts to learn"""
         concepts_map = {
             "testing": [
@@ -310,7 +313,7 @@ class EngineeringMentor:
         
         return concepts_map.get(dimension, [])
     
-    def _get_common_pitfalls(self, dimension: str) -> List[str]:
+    def _get_common_pitfalls(self, dimension: str) -> list[str]:
         """Get common pitfalls for this dimension"""
         pitfalls_map = {
             "testing": [

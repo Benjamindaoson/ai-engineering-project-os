@@ -4,18 +4,27 @@ Repository Layer
 Data access layer for the AI Engineering Project OS.
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import select, update, delete
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from packages.database.models import (
-    Project, RepositorySnapshot, ProjectFact, MaturityAssessment,
-    Gap, EngineeringTask, ExecutionRun, VerificationResult,
-    Evidence, ProjectVersion, InterviewSession, InterviewQuestion
+    EngineeringTask,
+    Evidence,
+    ExecutionRun,
+    Gap,
+    InterviewQuestion,
+    InterviewSession,
+    MaturityAssessment,
+    Project,
+    ProjectFact,
+    ProjectVersion,
+    RepositorySnapshot,
+    VerificationResult,
 )
 
 
@@ -38,7 +47,7 @@ class ProjectRepository:
         await self.session.refresh(project)
         return project
     
-    async def get(self, project_id: str) -> Optional[Project]:
+    async def get(self, project_id: str) -> Project | None:
         """Get project by ID"""
         result = await self.session.execute(
             select(Project)
@@ -54,7 +63,7 @@ class ProjectRepository:
         )
         return result.scalar_one_or_none()
     
-    async def list_all(self) -> List[Project]:
+    async def list_all(self) -> list[Project]:
         """List all projects"""
         result = await self.session.execute(select(Project))
         return list(result.scalars().all())
@@ -104,7 +113,7 @@ class SnapshotRepository:
         await self.session.refresh(snapshot)
         return snapshot
     
-    async def get_latest(self, project_id: str) -> Optional[RepositorySnapshot]:
+    async def get_latest(self, project_id: str) -> RepositorySnapshot | None:
         """Get latest snapshot for project"""
         result = await self.session.execute(
             select(RepositorySnapshot)
@@ -125,10 +134,10 @@ class FactRepository:
         self,
         project_id: str,
         snapshot_id: str,
-        languages: List[str],
-        frameworks: List[str],
-        databases: List[str],
-        deployment: List[str],
+        languages: list[str],
+        frameworks: list[str],
+        databases: list[str],
+        deployment: list[str],
         project_type: str,
         total_files: int,
         total_lines: int,
@@ -138,8 +147,8 @@ class FactRepository:
         has_readme: bool,
         has_api_docs: bool,
         has_deployment_docs: bool,
-        implementation_status: Dict[str, Any],
-        raw_observations: List[Dict[str, Any]],
+        implementation_status: dict[str, Any],
+        raw_observations: list[dict[str, Any]],
     ) -> ProjectFact:
         """Create new project facts"""
         fact = ProjectFact(
@@ -167,7 +176,7 @@ class FactRepository:
         await self.session.refresh(fact)
         return fact
     
-    async def get_latest(self, project_id: str) -> Optional[ProjectFact]:
+    async def get_latest(self, project_id: str) -> ProjectFact | None:
         """Get latest facts for project"""
         result = await self.session.execute(
             select(ProjectFact)
@@ -189,9 +198,9 @@ class AssessmentRepository:
         project_id: str,
         snapshot_id: str,
         overall_level: str,
-        dimension_scores: Dict[str, Any],
-        blockers: List[Dict[str, Any]],
-        recommendations: List[str],
+        dimension_scores: dict[str, Any],
+        blockers: list[dict[str, Any]],
+        recommendations: list[str],
     ) -> MaturityAssessment:
         """Create new assessment"""
         assessment = MaturityAssessment(
@@ -208,7 +217,7 @@ class AssessmentRepository:
         await self.session.refresh(assessment)
         return assessment
     
-    async def get_latest(self, project_id: str) -> Optional[MaturityAssessment]:
+    async def get_latest(self, project_id: str) -> MaturityAssessment | None:
         """Get latest assessment for project"""
         result = await self.session.execute(
             select(MaturityAssessment)
@@ -225,7 +234,7 @@ class GapRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
     
-    async def create_batch(self, gaps: List[Dict[str, Any]]) -> List[Gap]:
+    async def create_batch(self, gaps: list[dict[str, Any]]) -> list[Gap]:
         """Create multiple gaps"""
         gap_objects = []
         for g in gaps:
@@ -249,7 +258,7 @@ class GapRepository:
             await self.session.refresh(gap)
         return gap_objects
     
-    async def get_for_project(self, project_id: str) -> List[Gap]:
+    async def get_for_project(self, project_id: str) -> list[Gap]:
         """Get all gaps for project"""
         result = await self.session.execute(
             select(Gap)
@@ -272,7 +281,7 @@ class TaskRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
     
-    async def create(self, task_data: Dict[str, Any]) -> EngineeringTask:
+    async def create(self, task_data: dict[str, Any]) -> EngineeringTask:
         """Create new task"""
         task = EngineeringTask(
             id=str(uuid.uuid4()),
@@ -291,7 +300,7 @@ class TaskRepository:
         await self.session.refresh(task)
         return task
     
-    async def get(self, task_id: str) -> Optional[EngineeringTask]:
+    async def get(self, task_id: str) -> EngineeringTask | None:
         """Get task by ID"""
         result = await self.session.execute(
             select(EngineeringTask)
@@ -300,7 +309,7 @@ class TaskRepository:
         )
         return result.scalar_one_or_none()
     
-    async def get_for_project(self, project_id: str) -> List[EngineeringTask]:
+    async def get_for_project(self, project_id: str) -> list[EngineeringTask]:
         """Get all tasks for project"""
         result = await self.session.execute(
             select(EngineeringTask)
@@ -329,7 +338,7 @@ class ExecutionRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
     
-    async def create(self, execution_data: Dict[str, Any]) -> ExecutionRun:
+    async def create(self, execution_data: dict[str, Any]) -> ExecutionRun:
         """Create new execution record"""
         execution = ExecutionRun(
             id=str(uuid.uuid4()),
@@ -346,7 +355,7 @@ class ExecutionRepository:
         await self.session.refresh(execution)
         return execution
     
-    async def get(self, execution_id: str) -> Optional[ExecutionRun]:
+    async def get(self, execution_id: str) -> ExecutionRun | None:
         """Get execution by ID"""
         result = await self.session.execute(
             select(ExecutionRun)
@@ -355,7 +364,7 @@ class ExecutionRepository:
         )
         return result.scalar_one_or_none()
     
-    async def update(self, execution_id: str, data: Dict[str, Any]):
+    async def update(self, execution_id: str, data: dict[str, Any]):
         """Update execution record"""
         data["completed_at"] = datetime.utcnow()
         await self.session.execute(
@@ -372,7 +381,7 @@ class VerificationRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
     
-    async def create(self, verification_data: Dict[str, Any]) -> VerificationResult:
+    async def create(self, verification_data: dict[str, Any]) -> VerificationResult:
         """Create new verification result"""
         verification = VerificationResult(
             id=str(uuid.uuid4()),
@@ -395,12 +404,15 @@ class EvidenceRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
     
-    async def create(self, evidence_data: Dict[str, Any]) -> Evidence:
+    async def create(self, evidence_data: dict[str, Any]) -> Evidence:
         """Create new evidence"""
         evidence = Evidence(
             id=str(uuid.uuid4()),
             project_id=evidence_data["project_id"],
             version_id=evidence_data.get("version_id"),
+            verification_id=evidence_data.get("verification_id"),
+            task_id=evidence_data.get("task_id"),
+            execution_id=evidence_data.get("execution_id"),
             evidence_type=evidence_data["evidence_type"],
             source_path=evidence_data["source_path"],
             title=evidence_data.get("title", ""),
@@ -415,7 +427,7 @@ class EvidenceRepository:
         await self.session.refresh(evidence)
         return evidence
     
-    async def get_for_project(self, project_id: str) -> List[Evidence]:
+    async def get_for_project(self, project_id: str) -> list[Evidence]:
         """Get all evidence for project"""
         result = await self.session.execute(
             select(Evidence)
@@ -431,7 +443,7 @@ class VersionRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
     
-    async def create(self, version_data: Dict[str, Any]) -> ProjectVersion:
+    async def create(self, version_data: dict[str, Any]) -> ProjectVersion:
         """Create new version"""
         # Get next version number
         result = await self.session.execute(
@@ -458,7 +470,7 @@ class VersionRepository:
         await self.session.refresh(version)
         return version
     
-    async def get_for_project(self, project_id: str) -> List[ProjectVersion]:
+    async def get_for_project(self, project_id: str) -> list[ProjectVersion]:
         """Get all versions for project"""
         result = await self.session.execute(
             select(ProjectVersion)
@@ -488,7 +500,7 @@ class InterviewRepository:
         await self.session.refresh(session)
         return session
     
-    async def get_session(self, session_id: str) -> Optional[InterviewSession]:
+    async def get_session(self, session_id: str) -> InterviewSession | None:
         """Get interview session by ID"""
         result = await self.session.execute(
             select(InterviewSession)
@@ -497,7 +509,7 @@ class InterviewRepository:
         )
         return result.scalar_one_or_none()
     
-    async def create_question(self, question_data: Dict[str, Any]) -> InterviewQuestion:
+    async def create_question(self, question_data: dict[str, Any]) -> InterviewQuestion:
         """Create new question"""
         question = InterviewQuestion(
             id=str(uuid.uuid4()),
@@ -522,7 +534,7 @@ class InterviewRepository:
         )
         await self.session.commit()
 
-    async def create_answer(self, answer_data: Dict[str, Any]):
+    async def create_answer(self, answer_data: dict[str, Any]):
         """Create a new interview answer"""
         from packages.database.models import InterviewAnswer
         answer = InterviewAnswer(
@@ -536,7 +548,7 @@ class InterviewRepository:
         await self.session.refresh(answer)
         return answer
 
-    async def create_assessment(self, assessment_data: Dict[str, Any]):
+    async def create_assessment(self, assessment_data: dict[str, Any]):
         """Create a new interview assessment"""
         from packages.database.models import InterviewAssessment
         assessment = InterviewAssessment(
@@ -560,7 +572,7 @@ class InterviewRepository:
         await self.session.refresh(assessment)
         return assessment
 
-    async def create_interview_gap(self, gap_data: Dict[str, Any]):
+    async def create_interview_gap(self, gap_data: dict[str, Any]):
         """Create a new interview gap"""
         from packages.database.models import InterviewGap
         gap = InterviewGap(
@@ -579,7 +591,7 @@ class InterviewRepository:
         await self.session.refresh(gap)
         return gap
 
-    async def get_session_questions(self, session_id: str) -> List[InterviewQuestion]:
+    async def get_session_questions(self, session_id: str) -> list[InterviewQuestion]:
         """Get all questions for a session"""
         result = await self.session.execute(
             select(InterviewQuestion)
@@ -588,7 +600,7 @@ class InterviewRepository:
         )
         return list(result.scalars().all())
 
-    async def get_session_gaps(self, session_id: str) -> List[Dict[str, Any]]:
+    async def get_session_gaps(self, session_id: str) -> list[dict[str, Any]]:
         """Get gaps identified during interview"""
         from packages.database.models import InterviewGap
         result = await self.session.execute(

@@ -1,10 +1,9 @@
 """
 Integration test for interview answer and dynamic follow-up flow
 """
-import pytest
-import asyncio
 from dataclasses import dataclass, field
-from typing import List, Optional
+
+import pytest
 
 from services.interview_engine import InterviewEngine
 
@@ -16,10 +15,10 @@ class MockQuestion:
     session_id: str
     question: str
     context: str = ""
-    user_answer: Optional[str] = None
-    follow_ups: List[str] = field(default_factory=list)
+    user_answer: str | None = None
+    follow_ups: list[str] = field(default_factory=list)
     current_follow_up: int = 0
-    gap_type: Optional[str] = "knowledge"
+    gap_type: str | None = "knowledge"
     status: str = "pending"
 
 
@@ -191,10 +190,16 @@ class TestInterviewFlowIntegration:
     @pytest.fixture
     async def fresh_db(self):
         """Create a fresh database for each test"""
-        import tempfile
         import os
         import shutil
-        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+        import tempfile
+
+        from sqlalchemy.ext.asyncio import (
+            AsyncSession,
+            async_sessionmaker,
+            create_async_engine,
+        )
+
         from packages.database.models import Base
 
         temp_dir = tempfile.mkdtemp()
@@ -216,7 +221,10 @@ class TestInterviewFlowIntegration:
     async def test_create_and_retrieve_interview_session(self, fresh_db):
         """Test creating and retrieving an interview session"""
         async with fresh_db() as session:
-            from packages.database.repositories import ProjectRepository, InterviewRepository
+            from packages.database.repositories import (
+                InterviewRepository,
+                ProjectRepository,
+            )
 
             # Create project
             project_repo = ProjectRepository(session)
@@ -237,7 +245,10 @@ class TestInterviewFlowIntegration:
     async def test_create_question_with_parent(self, fresh_db):
         """Test creating questions with parent references"""
         async with fresh_db() as session:
-            from packages.database.repositories import ProjectRepository, InterviewRepository
+            from packages.database.repositories import (
+                InterviewRepository,
+                ProjectRepository,
+            )
 
             # Create project and session
             project_repo = ProjectRepository(session)
@@ -287,7 +298,10 @@ class TestInterviewFlowIntegration:
     async def test_create_answer_and_assessment(self, fresh_db):
         """Test creating answers and assessments"""
         async with fresh_db() as session:
-            from packages.database.repositories import ProjectRepository, InterviewRepository
+            from packages.database.repositories import (
+                InterviewRepository,
+                ProjectRepository,
+            )
 
             # Setup
             project_repo = ProjectRepository(session)
@@ -334,7 +348,10 @@ class TestInterviewFlowIntegration:
     async def test_create_interview_gap(self, fresh_db):
         """Test creating interview gaps"""
         async with fresh_db() as session:
-            from packages.database.repositories import ProjectRepository, InterviewRepository
+            from packages.database.repositories import (
+                InterviewRepository,
+                ProjectRepository,
+            )
 
             # Setup
             project_repo = ProjectRepository(session)
@@ -368,7 +385,10 @@ class TestInterviewFlowIntegration:
     async def test_full_interview_session_lifecycle(self, fresh_db):
         """Test complete interview session from creation to gap identification"""
         async with fresh_db() as session:
-            from packages.database.repositories import ProjectRepository, InterviewRepository
+            from packages.database.repositories import (
+                InterviewRepository,
+                ProjectRepository,
+            )
 
             # Create project
             project_repo = ProjectRepository(session)

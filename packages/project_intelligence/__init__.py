@@ -5,14 +5,13 @@ Tools for analyzing and understanding project codebases.
 Now with proper evidence collection.
 """
 
+import json
 import os
 import re
-import json
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional, Set
-from pathlib import Path
 from datetime import datetime
-
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set
 
 # Language detection patterns
 LANGUAGE_EXTENSIONS = {
@@ -122,16 +121,16 @@ class Evidence:
 @dataclass
 class CodeAnalysisResult:
     """Result of code analysis"""
-    files: List[FileInfo] = field(default_factory=list)
-    language_stats: Dict[str, int] = field(default_factory=dict)
-    framework_stats: Dict[str, bool] = field(default_factory=dict)
-    database_stats: Dict[str, bool] = field(default_factory=dict)
-    deployment_stats: Dict[str, bool] = field(default_factory=dict)
-    llm_stats: Dict[str, bool] = field(default_factory=dict)
-    observability_stats: Dict[str, bool] = field(default_factory=dict)
-    test_files: List[str] = field(default_factory=list)
-    config_files: List[str] = field(default_factory=list)
-    evidence: List[Evidence] = field(default_factory=list)
+    files: list[FileInfo] = field(default_factory=list)
+    language_stats: dict[str, int] = field(default_factory=dict)
+    framework_stats: dict[str, bool] = field(default_factory=dict)
+    database_stats: dict[str, bool] = field(default_factory=dict)
+    deployment_stats: dict[str, bool] = field(default_factory=dict)
+    llm_stats: dict[str, bool] = field(default_factory=dict)
+    observability_stats: dict[str, bool] = field(default_factory=dict)
+    test_files: list[str] = field(default_factory=list)
+    config_files: list[str] = field(default_factory=list)
+    evidence: list[Evidence] = field(default_factory=list)
     readme_found: bool = False
     api_docs_found: bool = False
     deployment_docs_found: bool = False
@@ -155,7 +154,7 @@ class CodeAnalysisResult:
 
 def analyze_directory(
     root_path: str,
-    exclude_patterns: Optional[List[str]] = None
+    exclude_patterns: list[str] | None = None
 ) -> CodeAnalysisResult:
     """
     Analyze a project directory and extract information with evidence.
@@ -170,11 +169,11 @@ def analyze_directory(
     
     result = CodeAnalysisResult()
     root_path = Path(root_path)
-    evidence: List[Evidence] = []
+    evidence: list[Evidence] = []
     
     # Track file counts by language
-    language_counts: Dict[str, int] = {}
-    all_files: List[FileInfo] = []
+    language_counts: dict[str, int] = {}
+    all_files: list[FileInfo] = []
     
     # Walk directory
     for item in root_path.rglob("*"):
@@ -329,7 +328,7 @@ def analyze_directory(
                     if result.test_files:
                         result.has_eval = True
                 
-            except Exception as e:
+            except Exception:
                 pass
     
     result.files = all_files
@@ -380,8 +379,8 @@ def analyze_directory(
 
 
 def detect_project_type(
-    language_stats: Dict[str, int],
-    framework_stats: Dict[str, bool],
+    language_stats: dict[str, int],
+    framework_stats: dict[str, bool],
     result: CodeAnalysisResult,
 ) -> str:
     """Detect the type of project based on analysis"""
@@ -412,7 +411,7 @@ def detect_project_type(
 def build_project_facts(
     project_path: str,
     project_name: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Build project facts from analysis with evidence.
     
@@ -487,7 +486,7 @@ def build_project_facts(
     return facts
 
 
-def generate_observations(analysis: CodeAnalysisResult) -> List[Dict[str, Any]]:
+def generate_observations(analysis: CodeAnalysisResult) -> list[dict[str, Any]]:
     """Generate observations from analysis"""
     observations = []
     
@@ -550,7 +549,7 @@ def generate_observations(analysis: CodeAnalysisResult) -> List[Dict[str, Any]]:
     return observations
 
 
-def extract_file_content(file_path: str, start_line: int = 1, end_line: Optional[int] = None) -> str:
+def extract_file_content(file_path: str, start_line: int = 1, end_line: int | None = None) -> str:
     """Extract specific lines from a file"""
     try:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:

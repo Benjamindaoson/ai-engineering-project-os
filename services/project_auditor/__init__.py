@@ -6,20 +6,27 @@ assessing maturity, and identifying gaps.
 Now with real evidence-based assessment.
 """
 
-import os
 import json
+import os
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from packages.contracts.models import (
-    Gap, GapPriority, GapRisk, EffortEstimate,
-    ImplementationStatusType
+    EffortEstimate,
+    Gap,
+    GapPriority,
+    GapRisk,
+    ImplementationStatusType,
 )
-from packages.maturity_model import MaturityEvaluator, MaturityLevel
 from packages.evidence_model import EvidenceBuilder, EvidenceType
-from packages.project_intelligence import build_project_facts, analyze_directory, Evidence
+from packages.maturity_model import MaturityEvaluator, MaturityLevel
+from packages.project_intelligence import (
+    Evidence,
+    analyze_directory,
+    build_project_facts,
+)
 
 
 @dataclass
@@ -27,8 +34,8 @@ class RawObservation:
     """Raw observation during project analysis"""
     category: str
     finding: str
-    evidence_path: Optional[str] = None
-    evidence_lines: Optional[tuple] = None
+    evidence_path: str | None = None
+    evidence_lines: tuple | None = None
     severity: str = "info"
 
 
@@ -47,9 +54,9 @@ class ProjectAuditor:
         self,
         project_path: str,
         project_id: str,
-        github_url: Optional[str] = None,
-        user_goals: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        github_url: str | None = None,
+        user_goals: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Perform a complete project audit with evidence.
         
@@ -88,10 +95,10 @@ class ProjectAuditor:
     
     def _identify_gaps(
         self,
-        facts: Dict[str, Any],
+        facts: dict[str, Any],
         maturity: Any,
         project_id: str
-    ) -> List[Gap]:
+    ) -> list[Gap]:
         """Identify gaps based on maturity assessment and real facts"""
         gaps = []
         
@@ -133,7 +140,7 @@ class ProjectAuditor:
                 project_id=project_id,
                 dimension="testing",
                 description="Low test coverage",
-                current_state=f"Test coverage appears low",
+                current_state="Test coverage appears low",
                 target_state="At least 20% test coverage",
                 priority=GapPriority.MEDIUM,
                 effort_estimate=EffortEstimate.MEDIUM,
@@ -281,7 +288,7 @@ class ProjectAuditor:
         
         return gaps[:20]
     
-    def _determine_priority(self, blocker: Dict[str, Any]) -> GapPriority:
+    def _determine_priority(self, blocker: dict[str, Any]) -> GapPriority:
         """Determine gap priority based on blocker"""
         category = blocker.get("category", "")
         level = blocker.get("level_required", "")
@@ -297,7 +304,7 @@ class ProjectAuditor:
         
         return GapPriority.MEDIUM
     
-    def _estimate_effort(self, blocker: Dict[str, Any]) -> EffortEstimate:
+    def _estimate_effort(self, blocker: dict[str, Any]) -> EffortEstimate:
         """Estimate effort to fix a gap"""
         feature = blocker.get("criterion_name", "").lower()
         
@@ -312,7 +319,7 @@ class ProjectAuditor:
         
         return EffortEstimate.MEDIUM
     
-    def _determine_risk(self, blocker: Dict[str, Any]) -> GapRisk:
+    def _determine_risk(self, blocker: dict[str, Any]) -> GapRisk:
         """Determine risk of the gap"""
         category = blocker.get("category", "")
         

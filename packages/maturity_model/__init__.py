@@ -9,9 +9,9 @@ Defines the 5-level maturity model for AI engineering projects:
 - production: Can run in production with all governance
 """
 
-from enum import Enum
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class MaturityLevel(str, Enum):
@@ -59,7 +59,7 @@ class Criterion:
     description: str
     category: str  # e.g., "core_features", "data", "security"
     
-    def evaluate(self, project_facts: Dict[str, Any]) -> bool:
+    def evaluate(self, project_facts: dict[str, Any]) -> bool:
         """Override in subclasses"""
         raise NotImplementedError
 
@@ -68,12 +68,12 @@ class Criterion:
 class MaturityCriteriaSet:
     """Set of criteria for a maturity level"""
     level: MaturityLevel
-    criteria: List[Criterion] = field(default_factory=list)
+    criteria: list[Criterion] = field(default_factory=list)
     
     def add_criterion(self, criterion: Criterion):
         self.criteria.append(criterion)
     
-    def evaluate(self, project_facts: Dict[str, Any]) -> Dict[str, bool]:
+    def evaluate(self, project_facts: dict[str, Any]) -> dict[str, bool]:
         """Evaluate all criteria, return mapping of criterion_id -> passed"""
         results = {}
         for c in self.criteria:
@@ -83,7 +83,7 @@ class MaturityCriteriaSet:
                 results[c.id] = False
         return results
     
-    def score(self, project_facts: Dict[str, Any]) -> float:
+    def score(self, project_facts: dict[str, Any]) -> float:
         """Calculate score (0-100) for this level"""
         results = self.evaluate(project_facts)
         if not results:
@@ -98,21 +98,21 @@ class DimensionScore:
     dimension: str
     level: MaturityLevel
     progress: float  # 0-100
-    criteria_met: List[str] = field(default_factory=list)
-    criteria_missing: List[str] = field(default_factory=list)
-    evidence: List[Dict[str, Any]] = field(default_factory=list)
+    criteria_met: list[str] = field(default_factory=list)
+    criteria_missing: list[str] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
 class MaturityAssessment:
     """Complete maturity assessment result"""
     overall_level: MaturityLevel
-    dimension_scores: Dict[str, DimensionScore]
-    evidence: List[Dict[str, Any]] = field(default_factory=list)
-    blockers: List[Dict[str, Any]] = field(default_factory=list)
-    recommendations: List[str] = field(default_factory=list)
+    dimension_scores: dict[str, DimensionScore]
+    evidence: list[dict[str, Any]] = field(default_factory=list)
+    blockers: list[dict[str, Any]] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "overall_level": self.overall_level.value,
             "dimension_scores": {
@@ -191,7 +191,7 @@ class MaturityEvaluator:
     }
     
     def __init__(self):
-        self.criteria_sets: Dict[MaturityLevel, MaturityCriteriaSet] = {}
+        self.criteria_sets: dict[MaturityLevel, MaturityCriteriaSet] = {}
         self._init_criteria()
     
     def _init_criteria(self):
@@ -466,7 +466,7 @@ class MaturityEvaluator:
         ))
         self.criteria_sets[MaturityLevel.PRODUCTION] = prod_set
     
-    def evaluate(self, project_facts: Dict[str, Any]) -> MaturityAssessment:
+    def evaluate(self, project_facts: dict[str, Any]) -> MaturityAssessment:
         """
         Evaluate project maturity based on project facts.
         
@@ -563,7 +563,7 @@ class MaturityEvaluator:
             recommendations=recommendations,
         )
     
-    def get_upgrade_path(self, current_level: MaturityLevel) -> List[MaturityLevel]:
+    def get_upgrade_path(self, current_level: MaturityLevel) -> list[MaturityLevel]:
         """Get the upgrade path from current level to production"""
         path = []
         next_level = current_level.next()

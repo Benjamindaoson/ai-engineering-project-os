@@ -4,9 +4,9 @@ Tests for Maturity Model
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-import pytest
 from packages.maturity_model import MaturityEvaluator, MaturityLevel
 
 

@@ -6,9 +6,9 @@ Evidence is the foundation of all maturity assessments - every claim must be bac
 """
 
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import List, Dict, Any, Optional
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class EvidenceType(str, Enum):
@@ -41,12 +41,12 @@ class Evidence:
     title: str
     description: str
     content: str
-    line_start: Optional[int] = None
-    line_end: Optional[int] = None
+    line_start: int | None = None
+    line_end: int | None = None
     score: float = 0.0
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "type": self.type.value if isinstance(self.type, Enum) else self.type,
@@ -71,7 +71,7 @@ class EvidencePacket:
     query: str
     evidence: tuple[Evidence, ...] = field(default_factory=tuple)
     confidence: float = 0.0
-    blocked_evidence: tuple[Dict[str, Any], ...] = field(default_factory=tuple)
+    blocked_evidence: tuple[dict[str, Any], ...] = field(default_factory=tuple)
     
     @property
     def has_evidence(self) -> bool:
@@ -81,7 +81,7 @@ class EvidencePacket:
     def is_blocked(self) -> bool:
         return len(self.blocked_evidence) > 0
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "query": self.query,
             "evidence": [e.to_dict() for e in self.evidence],
@@ -98,25 +98,25 @@ class EvidenceStore:
     Provides methods for adding, querying, and validating evidence.
     """
     project_id: str
-    evidence: List[Evidence] = field(default_factory=list)
+    evidence: list[Evidence] = field(default_factory=list)
     
     def add(self, evidence: Evidence) -> None:
         """Add evidence to the store"""
         self.evidence.append(evidence)
     
-    def add_batch(self, evidence_list: List[Evidence]) -> None:
+    def add_batch(self, evidence_list: list[Evidence]) -> None:
         """Add multiple evidence items"""
         self.evidence.extend(evidence_list)
     
-    def get_by_type(self, evidence_type: EvidenceType) -> List[Evidence]:
+    def get_by_type(self, evidence_type: EvidenceType) -> list[Evidence]:
         """Get all evidence of a specific type"""
         return [e for e in self.evidence if e.type == evidence_type]
     
-    def get_by_source(self, source_path: str) -> List[Evidence]:
+    def get_by_source(self, source_path: str) -> list[Evidence]:
         """Get all evidence from a specific source"""
         return [e for e in self.evidence if e.source_path == source_path]
     
-    def get_by_min_score(self, min_score: float) -> List[Evidence]:
+    def get_by_min_score(self, min_score: float) -> list[Evidence]:
         """Get all evidence with score >= min_score"""
         return [e for e in self.evidence if e.score >= min_score]
     
@@ -156,7 +156,7 @@ class EvidenceStore:
             confidence=confidence,
         )
     
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "project_id": self.project_id,
             "evidence": [e.to_dict() for e in self.evidence],
@@ -184,8 +184,8 @@ class EvidenceBuilder:
     _title: str = ""
     _description: str = ""
     _content: str = ""
-    _line_start: Optional[int] = None
-    _line_end: Optional[int] = None
+    _line_start: int | None = None
+    _line_end: int | None = None
     _score: float = 0.0
     
     def with_id(self, id: str) -> "EvidenceBuilder":
@@ -242,10 +242,10 @@ class EvidenceBuilder:
 
 def build_evidence_packet(
     query: str,
-    candidates: List[Dict[str, Any]],
+    candidates: list[dict[str, Any]],
     *,
     min_score: float = 0.0,
-    blocked_filter: Optional[callable] = None,
+    blocked_filter: callable | None = None,
 ) -> EvidencePacket:
     """
     Build an EvidencePacket from candidate evidence.
@@ -259,8 +259,8 @@ def build_evidence_packet(
     Returns:
         EvidencePacket with matched and blocked evidence
     """
-    evidence: List[Evidence] = []
-    blocked: List[Dict[str, Any]] = []
+    evidence: list[Evidence] = []
+    blocked: list[dict[str, Any]] = []
     
     for item in candidates:
         text = str(item.get("text") or item.get("content") or "").strip()

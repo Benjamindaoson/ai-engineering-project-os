@@ -4,37 +4,41 @@ AI Engineering Project OS - API Service
 FastAPI-based API with real database persistence and services.
 """
 
-import os
 import json
-import uuid
+import os
 from contextlib import asynccontextmanager
-from typing import List, Dict, Any, Optional
 from pathlib import Path
-from datetime import datetime
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from packages.contracts.models import TaskStatus
 from packages.database import (
-    init_db, get_session, async_session,
-    ProjectRepository, SnapshotRepository, FactRepository,
-    AssessmentRepository, GapRepository, TaskRepository,
-    ExecutionRepository, VerificationRepository,
-    EvidenceRepository, VersionRepository, InterviewRepository,
+    AssessmentRepository,
+    EvidenceRepository,
+    ExecutionRepository,
+    FactRepository,
+    GapRepository,
+    InterviewRepository,
+    ProjectRepository,
+    SnapshotRepository,
+    TaskRepository,
+    VerificationRepository,
+    VersionRepository,
+    async_session,
+    init_db,
 )
 from packages.database.models import InterviewQuestion
-from packages.contracts.models import TaskStatus
-from services.project_auditor import ProjectAuditor
-from services.upgrade_planner import UpgradePlanner
 from services.engineering_mentor import EngineeringMentor
-from services.execution_runtime import ExecutionRuntime, ExecutionConfig
-from services.verification_engine import VerificationEngine
+from services.execution_runtime import ExecutionConfig, ExecutionRuntime
 from services.interview_engine import InterviewEngine
+from services.project_auditor import ProjectAuditor
 from services.repo_import import RepoImportService
-
+from services.upgrade_planner import UpgradePlanner
+from services.verification_engine import VerificationEngine
 
 # ============================================================================
 # Lifespan
@@ -79,9 +83,9 @@ verifier = VerificationEngine()
 # ============================================================================
 
 class ProjectImportRequest(BaseModel):
-    github_url: Optional[str] = None
-    local_path: Optional[str] = None
-    user_goals: Optional[List[str]] = None
+    github_url: str | None = None
+    local_path: str | None = None
+    user_goals: list[str] | None = None
 
 
 class AuditRequest(BaseModel):
@@ -444,7 +448,8 @@ async def get_task_mentor(task_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
     
     # Convert to UpgradeTask
-    from packages.contracts.models import UpgradeTask as UpgradeTaskModel, LearningContent, CompletionCriterion
+    from packages.contracts.models import CompletionCriterion, LearningContent
+    from packages.contracts.models import UpgradeTask as UpgradeTaskModel
     
     upgrade_task = UpgradeTaskModel(
         id=task.id,
@@ -483,7 +488,8 @@ async def execute_task(task_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Project workspace not found")
     
     # Convert to models
-    from packages.contracts.models import UpgradeTask as UpgradeTaskModel, LearningContent, CompletionCriterion
+    from packages.contracts.models import CompletionCriterion, LearningContent
+    from packages.contracts.models import UpgradeTask as UpgradeTaskModel
     
     upgrade_task = UpgradeTaskModel(
         id=task.id,
@@ -538,25 +544,35 @@ async def execute_task(task_id: str, db: AsyncSession = Depends(get_db)):
 
 @app.post("/api/executions/{execution_id}/verify")
 async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)):
-    """Verify execution"""
+    """Verify execution and create Evidence + ProjectVersion on PASS"""
     exec_repo = ExecutionRepository(db)
     task_repo = TaskRepository(db)
     verification_repo = VerificationRepository(db)
-    
+    evidence_repo = EvidenceRepository(db)
+    version_repo = VersionRepository(db)
+
     execution = await exec_repo.get(execution_id)
     if not execution:
         raise HTTPException(status_code=404, detail="Execution not found")
-    
+
     task = await task_repo.get(execution.task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     # Reconstruct objects
     from packages.contracts.models import (
-        UpgradeTask as UpgradeTaskModel, ExecutionRecord as ExecutionRecordModel,
-        LearningContent, CompletionCriterion, CodeChange, TestResult,
+        CodeChange,
+        CompletionCriterion,
+        LearningContent,
+        TestResult,
     )
-    
+    from packages.contracts.models import (
+        ExecutionRecord as ExecutionRecordModel,
+    )
+    from packages.contracts.models import (
+        UpgradeTask as UpgradeTaskModel,
+    )
+
     upgrade_task = UpgradeTaskModel(
         id=task.id,
         project_id=task.project_id,
@@ -566,7 +582,7 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
         learning_content=LearningContent(**task.learning_content) if task.learning_content else LearningContent(),
         completion_criteria=[CompletionCriterion(**c) for c in (task.completion_criteria or [])],
     )
-    
+
     exec_record = ExecutionRecordModel(
         id=execution.id,
         task_id=execution.task_id,
@@ -576,17 +592,19 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
         test_results=[TestResult(**t) for t in (execution.test_results or [])],
         status=TaskStatus(execution.status),
     )
-    
+
     # Get project workspace
     from packages.database import ProjectRepository
     async with async_session() as session:
         project_repo = ProjectRepository(session)
         project = await project_repo.get(execution.project_id)
         workspace_path = project.local_path if project else ""
-    
+        project_name = project.name if project else ""
+        current_maturity = project.current_maturity if project else "idea"
+
     # Verify
     result = verifier.verify(upgrade_task, exec_record, workspace_path)
-    
+
     # Save verification
     verification = await verification_repo.create({
         "execution_id": execution.id,
@@ -599,8 +617,76 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
         "missing_evidence": result.missing_evidence,
         "recommendations": result.recommendations,
     })
-    
-    return result.to_dict()
+
+    response = result.to_dict()
+    response["verification_id"] = verification.id
+
+    # If PASS, create Evidence and ProjectVersion
+    if result.overall_status == "PASS":
+        # Create Evidence records
+        evidence_ids = []
+
+        # CODE evidence
+        for change in execution.changes or []:
+            ev = await evidence_repo.create({
+                "project_id": task.project_id,
+                "verification_id": verification.id,
+                "evidence_type": "CODE",
+                "source_path": change.get("file_path", ""),
+                "title": f"Code change: {change.get('file_path', 'unknown')}",
+                "description": change.get("purpose", ""),
+                "content": change.get("diff", ""),
+            })
+            evidence_ids.append(ev.id)
+
+        # TEST evidence
+        for test_result in execution.test_results or []:
+            ev = await evidence_repo.create({
+                "project_id": task.project_id,
+                "verification_id": verification.id,
+                "evidence_type": "TEST",
+                "title": f"Test: {test_result.get('name', 'unknown')}",
+                "description": f"Status: {test_result.get('status', 'unknown')}",
+                "content": json.dumps(test_result, ensure_ascii=False),
+            })
+            evidence_ids.append(ev.id)
+
+        # RUN_RESULT evidence
+        if execution.test_results:
+            summary = {
+                "total": len(execution.test_results),
+                "passed": sum(1 for t in execution.test_results if t.get("status") == "passed"),
+                "failed": sum(1 for t in execution.test_results if t.get("status") == "failed"),
+            }
+            ev = await evidence_repo.create({
+                "project_id": task.project_id,
+                "verification_id": verification.id,
+                "evidence_type": "RUN_RESULT",
+                "title": f"Test run results for: {task.title}",
+                "description": f"Tests: {summary['passed']}/{summary['total']} passed",
+                "content": json.dumps(execution.test_results, ensure_ascii=False),
+            })
+            evidence_ids.append(ev.id)
+
+        # Create ProjectVersion
+        files_changed = [c.get("file_path", "") for c in (execution.changes or [])]
+        version = await version_repo.create({
+            "project_id": task.project_id,
+            "title": f"Completed: {task.title}",
+            "description": task.description or "",
+            "maturity_before": current_maturity,
+            "maturity_after": current_maturity,  # TODO: recalculate after re-audit
+            "files_changed": files_changed,
+        })
+
+        # Update task status to completed
+        await task_repo.update_status(task.id, "completed")
+
+        response["evidence_ids"] = evidence_ids
+        response["version_id"] = version.id
+        response["project_version_created"] = True
+
+    return response
 
 
 # ---- Evidence ----
