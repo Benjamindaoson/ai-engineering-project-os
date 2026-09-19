@@ -2,10 +2,11 @@
  * Playwright E2E Test: Complete Product Lifecycle with Strict Assertions
  * 
  * Tests the full upgrade lifecycle with REAL assertions:
- * Import → Audit → Plan → Task → Execute → Verify → Evidence → Version → Interview → Answer → Assessment
+ * Import → Audit → Plan → Task → Execute → VERIFY → Evidence → Version → Interview → Answer → Assessment
  * 
  * Strict requirements:
- * - Execute must call Verify (happens via API)
+ * - Execute must call Verify EXPLICITLY (execute does NOT auto-verify)
+ * - verification_id must exist after verify
  * - evidence.length > 0
  * - versions.length > 0
  * - No "暂无证据" allowed to pass
@@ -16,6 +17,10 @@
 
 import { test, expect } from '@playwright/test';
 
+// Configuration
+const FRONTEND_URL = 'http://localhost:3000'
+const API_BASE = 'http://localhost:8000'
+
 // Use a test GitHub URL (public repo)
 const TEST_GITHUB_URL = 'https://github.com/Benjamindaoson/AIEduRAG'
 const WEAK_ANSWER = '我不知道，可能是因为代码有问题吧。' // Weak answer to trigger follow-up
@@ -23,10 +28,12 @@ const WEAK_ANSWER = '我不知道，可能是因为代码有问题吧。' // Wea
 test.describe('Complete Product Lifecycle - Strict', () => {
   let projectId: string | null = null
   let taskId: string | null = null
+  let executionId: string | null = null
+  let verificationId: string | null = null
 
   test('should complete full upgrade lifecycle with strict assertions', async ({ page }) => {
     // Step 1: Import project
-    await page.goto('/projects/import')
+    await page.goto(`${FRONTEND_URL}/projects/import`)
     await expect(page.locator('h1')).toContainText('项目导入')
     
     // Enter GitHub URL
@@ -38,14 +45,14 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     // Wait for import to complete
     await expect(page.locator('text=导入成功')).toBeVisible({ timeout: 120000 })
     
-    // Extract project ID
+    // Extract project ID from the import result
     const projectIdElement = page.locator('code').first()
     await expect(projectIdElement).toBeVisible()
     projectId = await projectIdElement.textContent()
     console.log('Project ID:', projectId)
     
     // Step 2: Audit project
-    await page.goto(`/projects/health?project_id=${projectId}`)
+    await page.goto(`${FRONTEND_URL}/projects/health?project_id=${projectId}`)
     await expect(page.locator('h1')).toContainText('项目体检')
     
     // Click audit button
@@ -58,7 +65,7 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     await expect(page.locator('text=整体成熟度')).toBeVisible()
     
     // Step 3: Plan upgrades
-    await page.goto(`/upgrade-map?project_id=${projectId}`)
+    await page.goto(`${FRONTEND_URL}/upgrade-map?project_id=${projectId}`)
     await expect(page.locator('h1')).toContainText('升级地图')
     
     // Generate plan (if not already generated)
@@ -82,18 +89,40 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     taskId = urlParams.searchParams.get('task_id')
     console.log('Task ID:', taskId)
     
-    // Step 5: Execute task
-    await expect(page.locator('button:has-text("开始执行"), button:has-text("执行中")')).toBeVisible()
-    await page.click('button:has-text("开始执行")')
+    // Step 5: Execute task via API directly to get execution_id
+    if (taskId) {
+      const executeResponse = await page.request.post(`${API_BASE}/api/tasks/${taskId}/execute`)
+      expect(executeResponse.ok()).toBeTruthy()
+      const executeResult = await executeResponse.json()
+      
+      // Get execution_id from execute result
+      executionId = executeResult.execution_id
+      console.log('Execution ID:', executionId)
+      
+      // Execution should complete
+      expect(executeResult.status === 'completed' || executeResult.status === 'failed').toBe(true)
+    }
     
-    // Wait for execution to complete
-    await expect(page.locator('text=执行完成, text=执行失败')).toBeVisible({ timeout: 180000 })
+    // Step 6: VERIFY - MUST call explicitly after execute (execute does NOT auto-verify)
+    expect(executionId).toBeDefined()
+    console.log('Calling verify for execution:', executionId)
     
-    // Step 6: Verify (happens automatically after execute via API)
-    // The execute endpoint calls verify internally
+    const verifyResponse = await page.request.post(`${API_BASE}/api/executions/${executionId}/verify`)
+    expect(verifyResponse.ok()).toBeTruthy()
+    const verifyResult = await verifyResponse.json()
+    
+    // Verify result must have verification_id
+    verificationId = verifyResult.verification_id
+    expect(verificationId).toBeDefined()
+    console.log('Verification ID:', verificationId)
+    
+    // Verify result must have evidence_ids
+    expect(verifyResult.evidence_ids).toBeDefined()
+    expect(Array.isArray(verifyResult.evidence_ids)).toBe(true)
+    console.log('Evidence IDs:', verifyResult.evidence_ids)
     
     // Step 7: View Evidence and verify it exists
-    await page.goto(`/evidence?project_id=${projectId}`)
+    await page.goto(`${FRONTEND_URL}/evidence?project_id=${projectId}`)
     await expect(page.locator('h1')).toContainText('证据')
     
     // Wait for evidence to load
@@ -101,10 +130,11 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     
     // STRICT: Must have evidence - "暂无证据" is NOT allowed
     const noEvidenceText = page.locator('text=暂无证据')
-    const hasEvidence = !(await noEvidenceText.isVisible().catch(() => false))
+    const hasNoEvidence = await noEvidenceText.isVisible().catch(() => false)
+    expect(hasNoEvidence).toBe(false)
     
     // Check evidence via API to confirm
-    const evidenceResponse = await page.request.get(`/api/projects/${projectId}/evidence`)
+    const evidenceResponse = await page.request.get(`${API_BASE}/api/projects/${projectId}/evidence`)
     expect(evidenceResponse.ok()).toBeTruthy()
     const evidenceData = await evidenceResponse.json()
     const evidenceCount = evidenceData.evidence?.length || 0
@@ -112,10 +142,9 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     
     // STRICT: evidence.length must be > 0
     expect(evidenceCount).toBeGreaterThan(0)
-    expect(hasEvidence).toBe(true)
     
     // Step 8: View Versions and verify it exists
-    const versionsResponse = await page.request.get(`/api/projects/${projectId}/versions`)
+    const versionsResponse = await page.request.get(`${API_BASE}/api/projects/${projectId}/versions`)
     expect(versionsResponse.ok()).toBeTruthy()
     const versionsData = await versionsResponse.json()
     const versionsCount = versionsData.versions?.length || 0
@@ -125,7 +154,7 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     expect(versionsCount).toBeGreaterThan(0)
     
     // Step 9: Interview - start interview
-    await page.goto(`/interview?project_id=${projectId}`)
+    await page.goto(`${FRONTEND_URL}/interview?project_id=${projectId}`)
     await expect(page.locator('h1').first()).toBeVisible()
     
     // Wait for interview to load
@@ -165,6 +194,7 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     }
     
     console.log('Full lifecycle completed with strict assertions!')
+    console.log('Final IDs:', { projectId, taskId, executionId, verificationId })
   })
 
   test('should verify evidence and versions via API', async ({ page }) => {
@@ -176,7 +206,7 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     }
     
     // Check evidence via API
-    const evidenceResponse = await page.request.get(`/api/projects/${projectId}/evidence`)
+    const evidenceResponse = await page.request.get(`${API_BASE}/api/projects/${projectId}/evidence`)
     expect(evidenceResponse.ok()).toBeTruthy()
     const evidenceData = await evidenceResponse.json()
     
@@ -194,7 +224,7 @@ test.describe('Complete Product Lifecycle - Strict', () => {
     }
     
     // Check versions via API
-    const versionsResponse = await page.request.get(`/api/projects/${projectId}/versions`)
+    const versionsResponse = await page.request.get(`${API_BASE}/api/projects/${projectId}/versions`)
     expect(versionsResponse.ok()).toBeTruthy()
     const versionsData = await versionsResponse.json()
     
