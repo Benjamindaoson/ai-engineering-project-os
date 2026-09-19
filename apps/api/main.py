@@ -193,6 +193,28 @@ async def list_projects(db: AsyncSession = Depends(get_db)):
     }
 
 
+@app.get("/api/projects/{project_id}/versions")
+async def get_project_versions(project_id: str, db: AsyncSession = Depends(get_db)):
+    """Get all versions for a project"""
+    version_repo = VersionRepository(db)
+    versions = await version_repo.get_for_project(project_id)
+    return {
+        "versions": [
+            {
+                "id": v.id,
+                "version_number": v.version_number,
+                "title": v.title,
+                "description": v.description,
+                "maturity_before": v.maturity_before,
+                "maturity_after": v.maturity_after,
+                "files_changed": v.files_changed,
+                "created_at": v.created_at.isoformat() if v.created_at else None,
+            }
+            for v in versions
+        ]
+    }
+
+
 @app.get("/api/projects/{project_id}")
 async def get_project(project_id: str, db: AsyncSession = Depends(get_db)):
     """Get project details"""
@@ -624,105 +646,98 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
     response["verification_id"] = verification.id
 
     # If PASS, create Evidence and ProjectVersion
-    if result.overall_status == "PASS":
+    if result.overall_status == "passed" or result.overall_status == "PASS":
         # Create Evidence records
         evidence_ids = []
 
-        # CODE evidence
-        for change in execution.changes or []:
-            ev = await evidence_repo.create({
+        try:
+            # CODE evidence
+            for change in execution.changes or []:
+                if isinstance(change, str):
+                    change = json.loads(change)
+                file_path = change.get("file_path", "unknown")
+                ev = await evidence_repo.create({
+                    "project_id": task.project_id,
+                    "verification_id": verification.id,
+                    "evidence_type": "CODE",
+                    "source_path": file_path,
+                    "title": f"Code change: {file_path}",
+                    "description": change.get("purpose", ""),
+                    "content": change.get("diff", ""),
+                })
+                evidence_ids.append(ev.id)
+
+            # TEST evidence
+            for test_result in execution.test_results or []:
+                if isinstance(test_result, str):
+                    test_result = json.loads(test_result)
+                ev = await evidence_repo.create({
+                    "project_id": task.project_id,
+                    "verification_id": verification.id,
+                    "evidence_type": "TEST",
+                    "source_path": "test_results",
+                    "title": f"Test: {test_result.get('name', 'unknown')}",
+                    "description": f"Status: {test_result.get('status', 'unknown')}",
+                    "content": json.dumps(test_result, ensure_ascii=False),
+                })
+                evidence_ids.append(ev.id)
+
+            # RUN_RESULT evidence
+            if execution.test_results:
+                summary = {
+                    "total": len(execution.test_results),
+                    "passed": sum(1 for t in execution.test_results if t.get("status") == "passed"),
+                    "failed": sum(1 for t in execution.test_results if t.get("status") == "failed"),
+                }
+                ev = await evidence_repo.create({
+                    "project_id": task.project_id,
+                    "verification_id": verification.id,
+                    "evidence_type": "RUN_RESULT",
+                    "source_path": "test_summary",
+                    "title": f"Test run results for: {task.title}",
+                    "description": f"Tests: {summary['passed']}/{summary['total']} passed",
+                    "content": json.dumps(execution.test_results, ensure_ascii=False),
+                })
+                evidence_ids.append(ev.id)
+
+            # Create version with new maturity
+            files_changed = []
+            for c in (execution.changes or []):
+                if isinstance(c, dict):
+                    files_changed.append(c.get("file_path", ""))
+                elif isinstance(c, str):
+                    try:
+                        parsed = json.loads(c)
+                        files_changed.append(parsed.get("file_path", ""))
+                    except:
+                        files_changed.append(c)
+            new_maturity = current_maturity
+            
+            version = await version_repo.create({
                 "project_id": task.project_id,
-                "verification_id": verification.id,
-                "evidence_type": "CODE",
-                "source_path": change.get("file_path", ""),
-                "title": f"Code change: {change.get('file_path', 'unknown')}",
-                "description": change.get("purpose", ""),
-                "content": change.get("diff", ""),
+                "title": f"Completed: {task.title}",
+                "description": task.description or "",
+                "maturity_before": current_maturity,
+                "maturity_after": new_maturity,
+                "files_changed": files_changed,
             })
-            evidence_ids.append(ev.id)
 
-        # TEST evidence
-        for test_result in execution.test_results or []:
-            ev = await evidence_repo.create({
-                "project_id": task.project_id,
-                "verification_id": verification.id,
-                "evidence_type": "TEST",
-                "title": f"Test: {test_result.get('name', 'unknown')}",
-                "description": f"Status: {test_result.get('status', 'unknown')}",
-                "content": json.dumps(test_result, ensure_ascii=False),
-            })
-            evidence_ids.append(ev.id)
-
-        # RUN_RESULT evidence
-        if execution.test_results:
-            summary = {
-                "total": len(execution.test_results),
-                "passed": sum(1 for t in execution.test_results if t.get("status") == "passed"),
-                "failed": sum(1 for t in execution.test_results if t.get("status") == "failed"),
-            }
-            ev = await evidence_repo.create({
-                "project_id": task.project_id,
-                "verification_id": verification.id,
-                "evidence_type": "RUN_RESULT",
-                "title": f"Test run results for: {task.title}",
-                "description": f"Tests: {summary['passed']}/{summary['total']} passed",
-                "content": json.dumps(execution.test_results, ensure_ascii=False),
-            })
-            evidence_ids.append(ev.id)
-
-        # Create ProjectVersion
-        files_changed = [c.get("file_path", "") for c in (execution.changes or [])]
-
-        # Perform RE-AUDIT to get new maturity after changes
-        project_path = project.local_path if project else ""
-        new_maturity = current_maturity
-        new_gaps = []
-
-        if project_path and os.path.exists(project_path):
-            try:
-                # Run re-audit on the modified project
-                re_audit_result = auditor.audit(
-                    project_path=project_path,
-                    project_id=task.project_id,
-                    github_url=project.github_url if project else None,
-                )
-                new_maturity = re_audit_result.get("maturity_assessment", {}).get("overall_level", current_maturity)
-
-                # Update gaps based on new assessment
-                gap_repo = GapRepository(db)
-                await gap_repo.delete_for_project(task.project_id)
-                for g in re_audit_result.get("gaps", []):
-                    g["project_id"] = task.project_id
-                await gap_repo.create_batch(re_audit_result.get("gaps", []))
-                new_gaps = re_audit_result.get("gaps", [])
-
-                # Update project's current maturity
-                await project_repo.update_maturity(task.project_id, new_maturity)
-
-            except Exception as audit_error:
-                # If re-audit fails, keep old maturity
-                response["re_audit_warning"] = str(audit_error)
-
-        # Create version with new maturity
-        version = await version_repo.create({
-            "project_id": task.project_id,
-            "title": f"Completed: {task.title}",
-            "description": task.description or "",
-            "maturity_before": current_maturity,
-            "maturity_after": new_maturity,
-            "files_changed": files_changed,
-        })
+            response["evidence_ids"] = evidence_ids
+            response["version_id"] = version.id
+            response["project_version_created"] = True
+        except Exception as evidence_error:
+            import traceback
+            traceback.print_exc()
+            response["evidence_error"] = str(evidence_error)
+            response["evidence_ids"] = []
+            response["version_id"] = None
+            response["project_version_created"] = False
 
         # Update task status to completed
         await task_repo.update_status(task.id, "completed")
 
-        response["evidence_ids"] = evidence_ids
-        response["version_id"] = version.id
-        response["project_version_created"] = True
         response["maturity_before"] = current_maturity
-        response["maturity_after"] = new_maturity
-        response["gaps_after_re_audit"] = new_gaps
-        response["maturity_changed"] = new_maturity != current_maturity
+        response["maturity_after"] = current_maturity
 
     return response
 
