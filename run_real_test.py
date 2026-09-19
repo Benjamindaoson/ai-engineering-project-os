@@ -3,10 +3,9 @@ Proper integration test using real database and API.
 Starts the server and runs the complete cycle.
 """
 import subprocess
-import time
 import sys
-import os
-from pathlib import Path
+import time
+
 
 def main():
     # Start the API server in background

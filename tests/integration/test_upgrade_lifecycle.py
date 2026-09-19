@@ -2,13 +2,12 @@
 Integration test for upgrade lifecycle
 Tests: Task -> Execute -> Test -> Verify -> Evidence -> ProjectVersion -> Re-Audit
 """
-import pytest
-import tempfile
 import os
-import asyncio
+import tempfile
 from pathlib import Path
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from packages.database.models import Base
 
@@ -63,11 +62,11 @@ class TestUpgradeLifecycle:
         """Test full lifecycle: Task -> Execute -> Verify -> Evidence -> Version"""
         async with fresh_db() as session:
             from packages.database.repositories import (
+                EvidenceRepository,
+                ExecutionRepository,
                 ProjectRepository,
                 TaskRepository,
-                ExecutionRepository,
                 VerificationRepository,
-                EvidenceRepository,
                 VersionRepository,
             )
 
@@ -220,8 +219,8 @@ class TestEvidenceLifecycle:
         """Test that all evidence types can be created"""
         async with fresh_db() as session:
             from packages.database.repositories import (
-                ProjectRepository,
                 EvidenceRepository,
+                ProjectRepository,
             )
 
             project_repo = ProjectRepository(session)
@@ -300,9 +299,9 @@ class TestRestartPersistence:
 
         async with fresh_db() as session:
             from packages.database.repositories import (
+                EvidenceRepository,
                 ProjectRepository,
                 TaskRepository,
-                EvidenceRepository,
             )
 
             project_repo = ProjectRepository(session)
@@ -330,9 +329,9 @@ class TestRestartPersistence:
         # Open new session and verify data exists
         async with fresh_db() as session:
             from packages.database.repositories import (
+                EvidenceRepository,
                 ProjectRepository,
                 TaskRepository,
-                EvidenceRepository,
             )
 
             project_repo = ProjectRepository(session)
@@ -357,8 +356,8 @@ class TestInterviewGapToTask:
         """Test that an interview gap can be converted to a task"""
         async with fresh_db() as session:
             from packages.database.repositories import (
-                ProjectRepository,
                 InterviewRepository,
+                ProjectRepository,
                 TaskRepository,
             )
 
@@ -413,8 +412,8 @@ class TestCapabilityProfile:
         """Test that capability profile is generated from evidence"""
         async with fresh_db() as session:
             from packages.database.repositories import (
-                ProjectRepository,
                 EvidenceRepository,
+                ProjectRepository,
                 VersionRepository,
             )
 

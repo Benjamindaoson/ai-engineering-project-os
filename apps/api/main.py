@@ -33,7 +33,11 @@ from packages.database import (
     async_session,
     init_db,
 )
-from packages.database.models import EngineeringTask, InterviewQuestion, VerificationResult
+from packages.database.models import (
+    EngineeringTask,
+    InterviewQuestion,
+    VerificationResult,
+)
 from services.engineering_mentor import EngineeringMentor
 from services.execution_runtime import ExecutionConfig, ExecutionRuntime
 from services.interview_engine import InterviewEngine
@@ -645,9 +649,9 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
     response = result.to_dict()
     response["verification_id"] = verification.id
 
-    # If PASS, create Evidence and ProjectVersion
+    # If PASS, create Evidence, ProjectVersion, then Re-Audit
     if result.overall_status == "passed" or result.overall_status == "PASS":
-        # Create Evidence records
+        # Step 1: Create Evidence records with CORRECT field names
         evidence_ids = []
 
         try:
@@ -667,40 +671,50 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
                 })
                 evidence_ids.append(ev.id)
 
-            # TEST evidence
+            # TEST evidence - use correct field names: test_name, passed, duration_ms, error
             for test_result in execution.test_results or []:
                 if isinstance(test_result, str):
                     test_result = json.loads(test_result)
+                test_name = test_result.get("test_name", "unknown_test")
+                passed = test_result.get("passed", False)
+                duration_ms = test_result.get("duration_ms", 0)
+                error = test_result.get("error")
+                
                 ev = await evidence_repo.create({
                     "project_id": task.project_id,
                     "verification_id": verification.id,
                     "evidence_type": "TEST",
                     "source_path": "test_results",
-                    "title": f"Test: {test_result.get('name', 'unknown')}",
-                    "description": f"Status: {test_result.get('status', 'unknown')}",
+                    "title": f"Test: {test_name}",
+                    "description": f"Status: {'PASSED' if passed else 'FAILED'} | Duration: {duration_ms}ms",
                     "content": json.dumps(test_result, ensure_ascii=False),
                 })
                 evidence_ids.append(ev.id)
 
-            # RUN_RESULT evidence
+            # RUN_RESULT evidence - correctly count passed/failed
             if execution.test_results:
+                test_results = execution.test_results
+                total_count = len(test_results)
+                passed_count = sum(1 for t in test_results if t.get("passed", False) is True)
+                failed_count = sum(1 for t in test_results if t.get("passed", False) is False)
+                
                 summary = {
-                    "total": len(execution.test_results),
-                    "passed": sum(1 for t in execution.test_results if t.get("status") == "passed"),
-                    "failed": sum(1 for t in execution.test_results if t.get("status") == "failed"),
+                    "total": total_count,
+                    "passed": passed_count,
+                    "failed": failed_count,
                 }
                 ev = await evidence_repo.create({
                     "project_id": task.project_id,
                     "verification_id": verification.id,
                     "evidence_type": "RUN_RESULT",
                     "source_path": "test_summary",
-                    "title": f"Test run results for: {task.title}",
-                    "description": f"Tests: {summary['passed']}/{summary['total']} passed",
-                    "content": json.dumps(execution.test_results, ensure_ascii=False),
+                    "title": f"Test run results: {passed_count}/{total_count} passed",
+                    "description": f"Passed: {passed_count} | Failed: {failed_count}",
+                    "content": json.dumps(summary, ensure_ascii=False),
                 })
                 evidence_ids.append(ev.id)
 
-            # Create version with new maturity
+            # Step 2: Prepare files_changed list
             files_changed = []
             for c in (execution.changes or []):
                 if isinstance(c, dict):
@@ -711,8 +725,46 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
                         files_changed.append(parsed.get("file_path", ""))
                     except:
                         files_changed.append(c)
+
+            # Step 3: Re-Audit the modified workspace to get REAL new maturity
             new_maturity = current_maturity
+            new_gaps = []
+            new_project_facts = None
             
+            if workspace_path and os.path.exists(workspace_path):
+                try:
+                    # Run real re-audit on modified project
+                    re_audit_result = auditor.audit(
+                        project_path=workspace_path,
+                        project_id=task.project_id,
+                        github_url=project.github_url if project else None,
+                    )
+                    
+                    # Get REAL new maturity from re-audit
+                    new_maturity = re_audit_result.get("maturity_assessment", {}).get("overall_level", current_maturity)
+                    new_project_facts = re_audit_result.get("project_facts", {})
+                    new_gaps = re_audit_result.get("gaps", [])
+                    
+                    # Update project facts in database
+                    project_repo = ProjectRepository(db)
+                    await project_repo.update_facts(task.project_id, new_project_facts)
+                    
+                    # Update gaps in database
+                    gap_repo = GapRepository(db)
+                    await gap_repo.delete_for_project(task.project_id)
+                    for g in new_gaps:
+                        g["project_id"] = task.project_id
+                    await gap_repo.create_batch(new_gaps)
+                    
+                    # Update project's current maturity
+                    await project_repo.update_maturity(task.project_id, new_maturity)
+                    
+                except Exception as audit_error:
+                    # If re-audit fails, use current maturity
+                    new_maturity = current_maturity
+                    response["re_audit_warning"] = str(audit_error)
+
+            # Step 4: Create ProjectVersion with REAL new maturity
             version = await version_repo.create({
                 "project_id": task.project_id,
                 "title": f"Completed: {task.title}",
@@ -725,6 +777,15 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
             response["evidence_ids"] = evidence_ids
             response["version_id"] = version.id
             response["project_version_created"] = True
+            response["maturity_before"] = current_maturity
+            response["maturity_after"] = new_maturity
+            response["maturity_changed"] = new_maturity != current_maturity
+            
+            if new_project_facts:
+                response["project_facts"] = new_project_facts
+            if new_gaps:
+                response["gaps_after_re_audit"] = len(new_gaps)
+                
         except Exception as evidence_error:
             import traceback
             traceback.print_exc()
@@ -735,9 +796,6 @@ async def verify_execution(execution_id: str, db: AsyncSession = Depends(get_db)
 
         # Update task status to completed
         await task_repo.update_status(task.id, "completed")
-
-        response["maturity_before"] = current_maturity
-        response["maturity_after"] = current_maturity
 
     return response
 
@@ -982,7 +1040,6 @@ async def create_experiment(
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new experiment with hypothesis and metrics tracking"""
-    import uuid
     from datetime import datetime
 
     # Create experiment in database
@@ -1051,7 +1108,6 @@ async def run_experiment(
     db: AsyncSession = Depends(get_db),
 ):
     """Run an experiment and record real metrics"""
-    import uuid
     from datetime import datetime
 
     exp_run_repo = ExperimentRunRepository(db)

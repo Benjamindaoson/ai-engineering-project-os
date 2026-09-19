@@ -122,9 +122,7 @@ class Criterion:
     
     def _evaluate_product_definition(self, facts: dict[str, Any]) -> bool:
         """Evaluate product definition criteria (relaxed)"""
-        if self.id == "idea_problem":
-            return facts.get("has_readme", False)
-        elif self.id == "idea_users":
+        if self.id == "idea_problem" or self.id == "idea_users":
             return facts.get("has_readme", False)
         elif self.id == "idea_io":
             return True  # Assume if code exists

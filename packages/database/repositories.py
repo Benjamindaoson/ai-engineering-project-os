@@ -77,6 +77,38 @@ class ProjectRepository:
         )
         await self.session.commit()
     
+    async def update_facts(self, project_id: str, facts: dict):
+        """Update or create project facts"""
+        from packages.database.models import ProjectFact
+        
+        # Delete existing facts
+        await self.session.execute(
+            delete(ProjectFact).where(ProjectFact.project_id == project_id)
+        )
+        
+        # Create new facts
+        if facts:
+            project_fact = ProjectFact(
+                id=str(uuid.uuid4()),
+                project_id=project_id,
+                languages=facts.get("languages", []),
+                frameworks=facts.get("frameworks", []),
+                databases=facts.get("databases", []),
+                deployment=facts.get("deployment", []),
+                total_files=facts.get("total_files", 0),
+                total_lines=facts.get("total_lines", 0),
+                code_lines=facts.get("code_lines", 0),
+                test_files=facts.get("test_files", 0),
+                config_files=facts.get("config_files", 0),
+                has_readme=facts.get("has_readme", False),
+                has_api_docs=facts.get("has_api_docs", False),
+                has_deployment_docs=facts.get("has_deployment_docs", False),
+                project_type=facts.get("project_type", "other"),
+                raw_observations=facts.get("raw_observations", []),
+            )
+            self.session.add(project_fact)
+            await self.session.commit()
+    
     async def delete(self, project_id: str):
         """Delete project"""
         await self.session.execute(

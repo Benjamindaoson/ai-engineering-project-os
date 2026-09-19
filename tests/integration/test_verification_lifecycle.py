@@ -1,11 +1,11 @@
 """
 Integration test for verification -> evidence -> version lifecycle
 """
-import pytest
-import tempfile
 import os
-import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+import tempfile
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from packages.database.models import Base
 
@@ -35,8 +35,11 @@ async def test_verification_creates_evidence_on_pass(fresh_db):
     """Test that PASS verification creates CODE/TEST/RUN_RESULT evidence"""
     async with fresh_db() as session:
         from packages.database.repositories import (
-            ProjectRepository, TaskRepository, ExecutionRepository,
-            VerificationRepository, EvidenceRepository, VersionRepository
+            EvidenceRepository,
+            ExecutionRepository,
+            ProjectRepository,
+            TaskRepository,
+            VerificationRepository,
         )
 
         # Setup
@@ -115,8 +118,11 @@ async def test_verification_fail_does_not_create_version(fresh_db):
     """Test that FAIL verification does NOT create successful version"""
     async with fresh_db() as session:
         from packages.database.repositories import (
-            ProjectRepository, TaskRepository, ExecutionRepository,
-            VerificationRepository, VersionRepository
+            ExecutionRepository,
+            ProjectRepository,
+            TaskRepository,
+            VerificationRepository,
+            VersionRepository,
         )
 
         # Setup
@@ -166,8 +172,11 @@ async def test_pass_creates_project_version(fresh_db):
     """Test that PASS verification creates ProjectVersion"""
     async with fresh_db() as session:
         from packages.database.repositories import (
-            ProjectRepository, TaskRepository, ExecutionRepository,
-            VerificationRepository, VersionRepository
+            ExecutionRepository,
+            ProjectRepository,
+            TaskRepository,
+            VerificationRepository,
+            VersionRepository,
         )
 
         # Setup
@@ -227,7 +236,9 @@ async def test_evidence_has_correct_relationships(fresh_db):
     """Test evidence is properly linked to verification/version/project"""
     async with fresh_db() as session:
         from packages.database.repositories import (
-            ProjectRepository, VersionRepository, EvidenceRepository
+            EvidenceRepository,
+            ProjectRepository,
+            VersionRepository,
         )
 
         # Setup

@@ -1,19 +1,28 @@
 """Debug script to test verification directly"""
 import sys
+
 sys.path.insert(0, '.')
 
 import asyncio
-import os
-from packages.database import init_db, async_session
-from packages.database.repositories import ExecutionRepository, TaskRepository, VerificationRepository
-from services.verification_engine import VerificationEngine
-from packages.contracts.models import (
-    CodeChange, CompletionCriterion, LearningContent, TestResult,
-    ExecutionRecord as ExecutionRecordModel,
-    UpgradeTask as UpgradeTaskModel,
-    TaskStatus
-)
 import json
+import os
+
+from packages.contracts.models import (
+    CodeChange,
+    CompletionCriterion,
+    LearningContent,
+    TaskStatus,
+    TestResult,
+)
+from packages.contracts.models import ExecutionRecord as ExecutionRecordModel
+from packages.contracts.models import UpgradeTask as UpgradeTaskModel
+from packages.database import async_session, init_db
+from packages.database.repositories import (
+    ExecutionRepository,
+    TaskRepository,
+)
+from services.verification_engine import VerificationEngine
+
 
 async def test_verify():
     await init_db()

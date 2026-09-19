@@ -3,13 +3,13 @@ Proper integration test that uses the REAL database through the API.
 Tests the complete AIEduRAG cycle: Import -> Audit -> Plan -> Execute -> Verify -> Evidence -> Version
 """
 import asyncio
-import sys
-import os
 import json
-import tempfile
+import os
+import sys
 import time
-import httpx
 from pathlib import Path
+
+import httpx
 
 # Add project to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -223,13 +223,20 @@ async def main():
         print(f"[OK] Execution status: {exec_result.get('status')}")
         print(f"[OK] Changes: {exec_result.get('changes', 0)}")
 
-        # Step 6: Verify
-        print("\n[6] VERIFY via API")
+        # Step 6: Verify (includes Re-Audit after Evidence/Version)
+        print("\n[6] VERIFY via API (with Re-Audit)")
         verify_result = await verify_execution(execution_id)
         verify_status = verify_result.get("overall_status")
         verification_id = verify_result.get("verification_id")
+        maturity_after_verify = verify_result.get("maturity_after")
+        maturity_changed = verify_result.get("maturity_changed", False)
+        re_audit_warning = verify_result.get("re_audit_warning")
         print(f"[OK] Verification status: {verify_status}")
         print(f"[OK] Verification ID: {verification_id}")
+        print(f"[OK] Maturity after verify: {maturity_after_verify}")
+        print(f"[OK] Maturity changed: {maturity_changed}")
+        if re_audit_warning:
+            print(f"[WARN] Re-Audit warning: {re_audit_warning}")
 
         # Step 7: Check Evidence (created by verification on PASS)
         print("\n[7] CHECK EVIDENCE in database")
@@ -278,7 +285,7 @@ async def main():
         }
         with open("data/real_aiedurag_cycle_result.json", "w") as f:
             json.dump(result, f, indent=2)
-        print(f"\n[OK] Results saved to data/real_aiedurag_cycle_result.json")
+        print("\n[OK] Results saved to data/real_aiedurag_cycle_result.json")
 
         return result
 
