@@ -8,9 +8,18 @@ const config = defineConfig({
   forbidOnly: false,
   retries: 0,
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://localhost:3001',
     trace: 'on-first-retry',
     headless: true,
+  },
+  // Start servers automatically before running tests
+  webServer: {
+    command: 'npm run dev:3001',
+    port: 3001,
+    reuseExistingServer: true,
+    timeout: 120000,
+    stdout: 'pipe',
+    stderr: 'pipe',
   },
   projects: [
     {
