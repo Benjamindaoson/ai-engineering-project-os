@@ -1,6 +1,8 @@
 // @ts-check
+const { defineConfig, devices } = require('@playwright/test');
+
 /** @type {import('@playwright/test').PlaywrightTestConfig} */
-const config = {
+const config = defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: false,
@@ -8,6 +10,7 @@ const config = {
   use: {
     baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
+    headless: true,
   },
   projects: [
     {
@@ -15,6 +18,6 @@ const config = {
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-};
+});
 
 module.exports = config;

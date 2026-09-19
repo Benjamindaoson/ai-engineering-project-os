@@ -1,0 +1,15 @@
+{
+  "github_url": "https://github.com/Benjamindaoson/AIEduRAG",
+  "workspace_path": "workspaces\\0f73dc73-5509-4bd9-b290-796570e7d32d",
+  "maturity_before": "mvp",
+  "maturity_after": "mvp",
+  "modified_files": [
+    "docker-compose.yml"
+  ],
+  "verification_status": "passed",
+  "evidence_count": 1,
+  "evidence_ids": [
+    "ev-0"
+  ],
+  "version_id": "v-83614"
+}
