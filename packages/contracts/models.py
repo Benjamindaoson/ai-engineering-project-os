@@ -266,6 +266,8 @@ class ExecutionRecord:
     started_at: str = field(default_factory=lambda: datetime.now().isoformat())
     completed_at: str | None = None
     error: str | None = None
+    trace_id: str | None = None
+    harness_metadata: dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -290,6 +292,8 @@ class ExecutionRecord:
             "started_at": self.started_at,
             "completed_at": self.completed_at,
             "error": self.error,
+            "trace_id": self.trace_id,
+            "harness_metadata": self.harness_metadata,
         }
 
 
