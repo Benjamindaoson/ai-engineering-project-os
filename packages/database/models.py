@@ -221,6 +221,8 @@ class ExecutionRun(Base):
     
     execution_log = Column(Text, default="")
     status = Column(String(20), default="pending")
+    trace_id = Column(String(64), nullable=True, index=True)
+    harness_metadata = Column(JSON, default=dict)
     
     started_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
@@ -230,6 +232,72 @@ class ExecutionRun(Base):
     task = relationship("EngineeringTask", back_populates="executions")
     project = relationship("Project")
     verifications = relationship("VerificationResult", back_populates="execution", cascade="all, delete-orphan")
+
+
+class AgentTrace(Base):
+    """Persisted harness trace and aggregate execution metrics."""
+    __tablename__ = "agent_traces"
+
+    id = Column(String(36), primary_key=True)
+    trace_id = Column(String(64), nullable=False, unique=True, index=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    task_id = Column(String(36), nullable=True)
+    execution_id = Column(String(36), ForeignKey("execution_runs.id"), nullable=True)
+    spans = Column(JSON, default=list)
+    summary = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AgentEvaluation(Base):
+    """Agent-level eval result derived from trace + independent verification."""
+    __tablename__ = "agent_evaluations"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=False)
+    task_id = Column(String(36), nullable=True)
+    execution_id = Column(String(36), ForeignKey("execution_runs.id"), nullable=False)
+    verification_id = Column(String(36), nullable=True)
+    metrics = Column(JSON, default=dict)
+    gate_passed = Column(Boolean, nullable=True)
+    gate_failures = Column(JSON, default=list)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class HarnessApproval(Base):
+    """Durable human-in-the-loop approval request."""
+    __tablename__ = "harness_approvals"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True)
+    task_id = Column(String(36), nullable=True)
+    execution_id = Column(String(36), ForeignKey("execution_runs.id"), nullable=True)
+    action = Column(String(100), nullable=False)
+    risk = Column(String(20), nullable=False)
+    reason = Column(Text, default="")
+    payload = Column(JSON, default=dict)
+    status = Column(String(20), default="pending")
+    decided_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    decided_at = Column(DateTime, nullable=True)
+
+
+class FailureEvent(Base):
+    """Structured failure taxonomy and recovery decision."""
+    __tablename__ = "failure_events"
+
+    id = Column(String(36), primary_key=True)
+    project_id = Column(String(36), ForeignKey("projects.id"), nullable=True)
+    task_id = Column(String(36), nullable=True)
+    execution_id = Column(String(36), ForeignKey("execution_runs.id"), nullable=True)
+    failure_type = Column(String(50), nullable=False)
+    phase = Column(String(50), nullable=False)
+    message = Column(Text, default="")
+    return_code = Column(Integer, nullable=True)
+    recovery_action = Column(String(50), nullable=True)
+    retryable = Column(Boolean, default=False)
+    resolved = Column(Boolean, default=False)
+    details = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 class VerificationResult(Base):
