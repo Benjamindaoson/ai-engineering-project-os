@@ -6,9 +6,13 @@ SQLite-based persistence layer.
 
 from packages.database.models import (
     DATABASE_URL,
+    AgentEvaluation,
+    AgentTrace,
     Base,
     EngineeringTask,
     Evidence,
+    FailureEvent,
+    HarnessApproval,
     Experiment,
     ExperimentRun,
     Gap,
@@ -26,8 +30,12 @@ from packages.database.models import (
     init_db,
 )
 from packages.database.repositories import (
+    AgentEvaluationRepository,
+    AgentTraceRepository,
     AssessmentRepository,
     EvidenceRepository,
+    FailureEventRepository,
+    HarnessApprovalRepository,
     ExecutionRepository,
     ExperimentRepository,
     ExperimentRunRepository,
@@ -54,6 +62,10 @@ __all__ = [
     "VerificationResult",
     "Evidence",
     "ProjectVersion",
+    "AgentTrace",
+    "AgentEvaluation",
+    "HarnessApproval",
+    "FailureEvent",
     "InterviewSession",
     "InterviewQuestion",
     # Initialization
@@ -64,6 +76,10 @@ __all__ = [
     "DATABASE_URL",
     # Repositories
     "ProjectRepository",
+    "AgentTraceRepository",
+    "AgentEvaluationRepository",
+    "HarnessApprovalRepository",
+    "FailureEventRepository",
     "SnapshotRepository",
     "FactRepository",
     "AssessmentRepository",

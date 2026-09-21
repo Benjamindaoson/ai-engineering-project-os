@@ -13,9 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from packages.database.models import (
+    AgentEvaluation,
+    AgentTrace,
     EngineeringTask,
     Evidence,
     ExecutionRun,
+    FailureEvent,
+    HarnessApproval,
     Gap,
     InterviewQuestion,
     InterviewSession,
@@ -381,6 +385,9 @@ class ExecutionRepository:
             benchmark_results=execution_data.get("benchmark_results", []),
             execution_log=execution_data.get("execution_log", ""),
             status=execution_data.get("status", "pending"),
+            trace_id=execution_data.get("trace_id"),
+            harness_metadata=execution_data.get("harness_metadata", {}),
+            error=execution_data.get("error"),
         )
         self.session.add(execution)
         await self.session.commit()
@@ -404,6 +411,164 @@ class ExecutionRepository:
             .where(ExecutionRun.id == execution_id)
             .values(**data)
         )
+        await self.session.commit()
+
+
+class AgentTraceRepository:
+    """Persistence for full Agent Harness traces."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, data: dict[str, Any]) -> AgentTrace:
+        row = AgentTrace(
+            id=str(uuid.uuid4()),
+            trace_id=data["trace_id"],
+            project_id=data["project_id"],
+            task_id=data.get("task_id"),
+            execution_id=data.get("execution_id"),
+            spans=data.get("spans", []),
+            summary=data.get("summary", {}),
+        )
+        self.session.add(row)
+        await self.session.commit()
+        await self.session.refresh(row)
+        return row
+
+    async def get_by_trace_id(self, trace_id: str) -> AgentTrace | None:
+        result = await self.session.execute(select(AgentTrace).where(AgentTrace.trace_id == trace_id))
+        return result.scalar_one_or_none()
+
+    async def get_for_execution(self, execution_id: str) -> AgentTrace | None:
+        result = await self.session.execute(
+            select(AgentTrace).where(AgentTrace.execution_id == execution_id).order_by(AgentTrace.created_at.desc())
+        )
+        return result.scalars().first()
+
+
+class AgentEvaluationRepository:
+    """Persistence for agent-level evaluation metrics."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, data: dict[str, Any]) -> AgentEvaluation:
+        row = AgentEvaluation(
+            id=str(uuid.uuid4()),
+            project_id=data["project_id"],
+            task_id=data.get("task_id"),
+            execution_id=data["execution_id"],
+            verification_id=data.get("verification_id"),
+            metrics=data.get("metrics", {}),
+            gate_passed=data.get("gate_passed"),
+            gate_failures=data.get("gate_failures", []),
+        )
+        self.session.add(row)
+        await self.session.commit()
+        await self.session.refresh(row)
+        return row
+
+    async def get_for_execution(self, execution_id: str) -> AgentEvaluation | None:
+        result = await self.session.execute(
+            select(AgentEvaluation)
+            .where(AgentEvaluation.execution_id == execution_id)
+            .order_by(AgentEvaluation.created_at.desc())
+        )
+        return result.scalars().first()
+
+    async def get_for_project(self, project_id: str) -> list[AgentEvaluation]:
+        result = await self.session.execute(
+            select(AgentEvaluation)
+            .where(AgentEvaluation.project_id == project_id)
+            .order_by(AgentEvaluation.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+
+class HarnessApprovalRepository:
+    """Durable human approval queue for high-risk harness actions."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, data: dict[str, Any]) -> HarnessApproval:
+        row = HarnessApproval(
+            id=data.get("id") or str(uuid.uuid4()),
+            project_id=data.get("project_id"),
+            task_id=data.get("task_id"),
+            execution_id=data.get("execution_id"),
+            action=data["action"],
+            risk=data["risk"],
+            reason=data.get("reason", ""),
+            payload=data.get("payload", {}),
+            status=data.get("status", "pending"),
+        )
+        self.session.add(row)
+        await self.session.commit()
+        await self.session.refresh(row)
+        return row
+
+    async def get(self, approval_id: str) -> HarnessApproval | None:
+        result = await self.session.execute(select(HarnessApproval).where(HarnessApproval.id == approval_id))
+        return result.scalar_one_or_none()
+
+    async def pending(self, project_id: str | None = None) -> list[HarnessApproval]:
+        stmt = select(HarnessApproval).where(HarnessApproval.status == "pending")
+        if project_id:
+            stmt = stmt.where(HarnessApproval.project_id == project_id)
+        result = await self.session.execute(stmt.order_by(HarnessApproval.created_at.asc()))
+        return list(result.scalars().all())
+
+    async def decide(self, approval_id: str, approved: bool, actor: str) -> HarnessApproval | None:
+        await self.session.execute(
+            update(HarnessApproval)
+            .where(HarnessApproval.id == approval_id)
+            .values(
+                status="approved" if approved else "denied",
+                decided_by=actor,
+                decided_at=datetime.utcnow(),
+            )
+        )
+        await self.session.commit()
+        return await self.get(approval_id)
+
+
+class FailureEventRepository:
+    """Structured failure and recovery-event persistence."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, data: dict[str, Any]) -> FailureEvent:
+        row = FailureEvent(
+            id=str(uuid.uuid4()),
+            project_id=data.get("project_id"),
+            task_id=data.get("task_id"),
+            execution_id=data.get("execution_id"),
+            failure_type=data["failure_type"],
+            phase=data.get("phase", "runtime"),
+            message=data.get("message", ""),
+            return_code=data.get("return_code"),
+            recovery_action=data.get("recovery_action"),
+            retryable=data.get("retryable", False),
+            resolved=data.get("resolved", False),
+            details=data.get("details", {}),
+        )
+        self.session.add(row)
+        await self.session.commit()
+        await self.session.refresh(row)
+        return row
+
+    async def get_for_execution(self, execution_id: str) -> list[FailureEvent]:
+        result = await self.session.execute(
+            select(FailureEvent)
+            .where(FailureEvent.execution_id == execution_id)
+            .order_by(FailureEvent.created_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def mark_resolved(self, event_id: str) -> None:
+        await self.session.execute(update(FailureEvent).where(FailureEvent.id == event_id).values(resolved=True))
         await self.session.commit()
 
 
@@ -675,6 +840,11 @@ class ExperimentRepository:
         )
         return list(result.scalars().all())
 
+    async def get(self, experiment_id: str) -> "Experiment | None":
+        from packages.database.models import Experiment
+        result = await self.session.execute(select(Experiment).where(Experiment.id == experiment_id))
+        return result.scalar_one_or_none()
+
 
 class ExperimentRunRepository:
     """Repository for ExperimentRun operations"""
@@ -688,8 +858,12 @@ class ExperimentRunRepository:
         run = ExperimentRun(
             id=str(uuid.uuid4()),
             experiment_id=run_data["experiment_id"],
+            project_id=run_data.get("project_id"),
+            version_id=run_data.get("version_id"),
             config=run_data.get("config", {}),
             status=run_data.get("status", "pending"),
+            metrics=run_data.get("metrics", {}),
+            latency_ms=run_data.get("latency_ms", 0.0),
         )
         self.session.add(run)
         await self.session.commit()
@@ -702,6 +876,15 @@ class ExperimentRunRepository:
         result = await self.session.execute(
             select(ExperimentRun)
             .where(ExperimentRun.experiment_id == experiment_id)
-            .order_by(ExperimentRun.created_at.desc())
+            .order_by(ExperimentRun.created_at.asc())
         )
         return list(result.scalars().all())
+
+    async def update(self, run_id: str, data: dict[str, Any]) -> None:
+        from packages.database.models import ExperimentRun
+        await self.session.execute(
+            update(ExperimentRun)
+            .where(ExperimentRun.id == run_id)
+            .values(**data)
+        )
+        await self.session.commit()
