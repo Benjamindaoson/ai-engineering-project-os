@@ -2,7 +2,7 @@
 
 **版本:** v1.0.0
 **日期:** 2026-09-20
-**Commit:** `516cbbd6dbf94d355bc223bc9165d7d9c6e88b41`
+**Commit:** `aaab188daf6f1489830b97d0369819bf4450c09c`
 **状态:** CORE EXIT GATE PASSED
 
 ---
