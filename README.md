@@ -1,146 +1,167 @@
 # AI Engineering Project OS
 
-**A long-horizon Agent Harness for autonomously auditing, upgrading, verifying, and recovering real AI/LLM codebases.**
+[**English**](README.md) | [中文](README.zh-CN.md)
 
-> 给它一个真实代码仓库，它不会只“写一段代码然后宣布完成”，而是持续执行：
-> **Audit → Gap → Plan → Execute → Verify → Recover / Replan → Evidence → Re-Audit**，
-> 直到工程结果被真实测试、构建产物和执行证据验证。
+**An autonomous engineering agent for upgrading real AI codebases.**
 
-**Status:** v1.0.0 · Core exit gate passed  
-**Focus:** Agent Harness · Long-Horizon Execution · Verification · Recovery · Sandbox · Tracing · Evaluation
+Give it a repository and an engineering goal. It reads the codebase, finds what is missing, makes the changes, runs tests, fixes failures, and keeps evidence of what actually worked.
 
----
+> **Most coding agents stop after writing code. This project keeps going until the change is tested and verified.**
 
-## What is this?
-
-AI Engineering Project OS is an **agent runtime / engineering control plane for repository-level tasks**.
-
-It is designed for a problem that ordinary coding assistants do not solve well:
-
-> **How can an AI agent work on a real repository for a long time, make multiple coordinated changes, know whether the work is actually correct, recover when something fails, and leave enough evidence for a human to trust the result?**
-
-You provide an AI/LLM repository and an engineering objective. The system:
-
-1. **Audits the repository** and builds an evidence-backed view of its current state.
-2. **Finds engineering gaps** instead of relying on a single prompt.
-3. **Plans bounded upgrade tasks** with explicit completion criteria.
-4. **Executes changes inside a controlled workspace / sandbox.**
-5. **Observes tool results, tests, builds, and intermediate state.**
-6. **Verifies completion using real evidence rather than model self-report.**
-7. **Classifies failures and retries, replans, rolls back, or requests human approval.**
-8. **Persists traces, evaluation results, evidence, and version history.**
-9. **Re-audits the repository** to measure what actually improved.
-
-In short:
-
-```text
-Real Repository
-      │
-      ▼
-   Audit
-      │
-      ▼
- Gap Analysis
-      │
-      ▼
- Upgrade Plan
-      │
-      ▼
- Agent Execution ───────────────┐
-      │                         │
-      ▼                         │
- Observe / Trace                │
-      │                         │
-      ▼                         │
-   Verify                       │
-   │    │                       │
- pass   fail                    │
-   │    │                       │
-   │    ▼                       │
-   │  Classify Failure          │
-   │    │                       │
-   │    ├─ Retry                │
-   │    ├─ Replan ──────────────┘
-   │    ├─ Rollback
-   │    └─ HITL Approval
-   ▼
-Evidence + Version
-      │
-      ▼
-   Re-Audit
-```
+**Validated on 3 real AI repositories:** 1,988 files · 219,977 lines of code.
 
 ---
 
-## Why this is not just another coding agent
+## What does it do?
 
-A normal coding agent is often optimized for:
-
-```text
-Prompt → Generate Patch → Run Something → Answer "Done"
-```
-
-This project is built around a stricter contract:
+You give the system:
 
 ```text
-A model proposal is NOT completion evidence.
-
-Completion must be supported by:
-tests + builds + artifacts + traces + persisted execution evidence
+A real repository
++
+An engineering goal
 ```
 
-| Problem | Typical coding assistant | AI Engineering Project OS |
+For example:
+
+> "Make this AI project production-ready. Add evaluation, failure recovery, tracing, and tests."
+
+The system then works through the repository step by step:
+
+```text
+Read the repo
+    ↓
+Find problems and missing pieces
+    ↓
+Plan the work
+    ↓
+Change the code
+    ↓
+Run tests and builds
+    ↓
+Did it work?
+ ┌───────────────┐
+ │ Yes           │ No
+ ↓               ↓
+Save evidence   Fix / retry / replan
+    ↓               │
+Re-check the repo ←─┘
+```
+
+It is built for **long-running engineering tasks**, not one-shot code generation.
+
+---
+
+## Why build this?
+
+A coding agent can generate a patch quickly.
+
+The harder problem is everything that comes after:
+
+- Did the change actually solve the problem?
+- Did it break something else?
+- What should happen when a tool or test fails?
+- How does the agent continue after many steps?
+- How do we know it did not forget an important requirement?
+- Which actions should require human approval?
+- What evidence proves the task is really finished?
+
+AI Engineering Project OS is built around those questions.
+
+---
+
+## What makes it different?
+
+| | Typical coding agent | AI Engineering Project OS |
 |---|---|---|
-| Long-running work | Prompt/session oriented | Persistent task and execution state |
-| Multi-step repository changes | Ad-hoc | Explicit plan → task → execution lifecycle |
-| Context growth | Mostly implicit | Token budget, compression, retention and drift checks |
-| Tool execution | Broad / prompt-driven | Controlled workspace and sandbox policy |
-| Failure handling | Retry the prompt | Failure taxonomy + recovery policy |
-| Risky actions | Weak boundary | HITL approval path |
-| “Is it finished?” | Model judgment | Deterministic verification + agent-level eval |
-| Debugging the agent | Conversation logs | Structured tracing and runtime metrics |
-| Proving the harness matters | Rare | Controlled harness ablations |
-| Auditability | Limited | Evidence and version persistence |
+| **Main goal** | Write code | Finish and verify an engineering task |
+| **Work style** | Prompt → patch | Plan → execute → verify → recover |
+| **Long tasks** | Mostly session-based | Persistent task and execution state |
+| **Failures** | Ask the model again | Retry, replan, rollback, or request approval |
+| **Context** | Mostly implicit | Budgeting, compression, retention, drift checks |
+| **Tool use** | Broad | Controlled workspace and sandbox rules |
+| **Completion** | Model says "done" | Tests, builds, artifacts, and evidence |
+| **Debugging** | Chat logs | Structured traces and runtime metrics |
+| **Evaluation** | Usually task output only | Agent-level reliability metrics and ablations |
 
 ---
 
-## Core Agent Harness
+## The core idea
 
-The merged Agent Harness runtime provides the control layer for long-horizon execution.
+The project separates four things that are often mixed together:
 
-### 1. Trace every agent run
+```text
+1. Proposal
+   What the model wants to do
 
-The runtime records structured spans and execution metrics so a failed task can be reconstructed instead of guessed at.
+2. Execution
+   What actually happened
 
-Tracked signals include:
+3. Verification
+   Whether the result passes the checks
 
-- agent / tool spans
-- tool calls and tool errors
-- retries
-- token usage
-- latency
-- cost metadata
-- execution summaries
+4. Evidence
+   Why we are allowed to call the task complete
+```
 
-### 2. Manage long-horizon context
+A model saying **"done"** is not enough.
 
-Repository-scale tasks accumulate too much context for a single prompt.
+The system expects real evidence such as:
 
-The context layer provides:
+- passing tests
+- successful builds
+- expected files or artifacts
+- tool results
+- execution traces
+- persisted verification records
 
-- explicit context budget
-- priority and pinned context
-- compression of oversized items
-- stale-context detection
-- dropped-context reporting
-- required-fact retention checks
-- context drift metrics
+---
 
-### 3. Verify instead of trusting self-report
+## Main capabilities
 
-A task is not complete because an LLM says it is complete.
+### Repository audit
 
-The evaluation layer derives agent-level metrics from execution traces and verification results, including:
+Reads a real AI/LLM repository and identifies engineering gaps such as missing tests, weak evaluation, incomplete recovery, observability gaps, or unsafe execution paths.
+
+### Task planning
+
+Turns those gaps into smaller tasks with clear acceptance criteria instead of asking one giant prompt to solve everything at once.
+
+### Code execution
+
+Runs repository-level work inside a controlled workspace and records what the agent changes and which tools it uses.
+
+### Verification
+
+Checks the real result after execution. A change is not accepted just because the model believes it is correct.
+
+### Failure recovery
+
+When something fails, the runtime can choose a recovery action such as:
+
+```text
+retry
+replan
+rollback
+request human approval
+stop
+```
+
+### Context management
+
+Long tasks create too much context. The harness can budget, compress, retain important facts, detect stale context, and measure context drift.
+
+### Tracing and metrics
+
+Records agent steps, tool calls, errors, retries, latency, token usage, and other execution signals so a failed run can be inspected later.
+
+### Sandbox and human approval
+
+Restricts risky file, command, and network actions. High-risk actions can be routed to a human instead of being executed automatically.
+
+### Agent evaluation
+
+Measures more than final task accuracy. The project can track:
 
 - task success
 - verification pass rate
@@ -149,125 +170,35 @@ The evaluation layer derives agent-level metrics from execution traces and verif
 - retry rate
 - recovery success rate
 - context drift
-- token / latency / cost signals
+- latency / token / cost signals
 
-### 4. Recover from failures
+It also supports **harness ablations** such as running without verification, recovery, context compression, or sandbox controls to measure whether those parts actually help.
 
-Failures are classified into structured failure types and mapped to explicit recovery actions.
+---
 
-The runtime can decide whether to:
+## Architecture
 
-```text
-RETRY
-REPLAN
-ROLLBACK
-REQUEST APPROVAL
-ABORT
+```mermaid
+flowchart TD
+    A["Import repository"] --> B["Audit"]
+    B --> C["Find engineering gaps"]
+    C --> D["Create upgrade plan"]
+    D --> E["Execute in sandbox"]
+    E --> F["Observe + trace"]
+    F --> G["Verify result"]
+    G -->|Pass| H["Save evidence + version"]
+    G -->|Fail| I["Retry / replan / rollback / HITL"]
+    I --> E
+    H --> J["Re-audit repository"]
 ```
 
-This turns recovery from a prompt trick into part of the runtime.
-
-### 5. Sandbox high-risk execution
-
-Repository modification is constrained by an execution boundary.
-
-The sandbox layer can enforce:
-
-- workspace-root restrictions
-- file-operation authorization
-- command authorization
-- network policy
-- changed-file limits
-- risk classification
-- human approval for high-risk actions
-
-### 6. Evaluate the harness itself
-
-The project includes controlled ablation support so reliability improvements can be tested instead of assumed.
-
-Canonical variants include:
-
-- full harness
-- no verification
-- no persistent state
-- no context compression
-- no recovery
-- no sandbox / HITL
-
-This makes the system not only an Agent runtime, but also an **evaluation platform for Agent reliability**.
-
----
-
-## End-to-end engineering lifecycle
-
-The repository-level workflow is:
-
-```text
-Audit
-  ↓
-Gap
-  ↓
-Plan
-  ↓
-Task
-  ↓
-Execute
-  ↓
-Observe
-  ↓
-Verify
-  ↓
-Evidence
-  ↓
-Version
-  ↓
-Re-Audit
-```
-
-The system separates four things that are often incorrectly collapsed together:
-
-- **Proposal** — what the model wants to do
-- **Execution** — what actually happened
-- **Verification** — whether the result satisfies the acceptance criteria
-- **Evidence** — why the system is allowed to call the task complete
-
-That separation is the core design principle of the project.
-
----
-
-## System components
-
-| Component | Responsibility |
-|---|---|
-| **Project Auditor** | Understand repository state and produce evidence-backed maturity findings |
-| **Upgrade Planner** | Convert gaps into bounded, testable engineering tasks |
-| **Execution Runtime** | Modify code and run tools inside the controlled workspace |
-| **Agent Harness** | Coordinate tracing, context, recovery, sandbox, HITL and evaluation |
-| **Verification Engine** | Verify files, commands, tests and build results |
-| **Evidence / Version Layer** | Persist why a task passed and what changed |
-| **Interview Engine** | Generate technical questions grounded in the actual repository |
-
----
-
-## Repository maturity model
-
-The project can audit repositories against an engineering maturity ladder:
-
-| Level | Typical evidence |
-|---|---|
-| **Idea** | Problem, user, inputs, outputs, data source, core technical direction |
-| **Demo** | Core workflow runs end-to-end |
-| **MVP** | Persistence, error handling, basic tests |
-| **Pre-production** | Evaluation, security, observability, logging and tracing |
-| **Production** | Real deployment constraints, capacity planning and failure recovery |
-
-The maturity score is useful, but it is **not** the runtime's source of truth. Concrete repository evidence remains the source of truth.
+More details: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
 ## Real-repository validation
 
-The system has been exercised against three non-trivial AI repositories:
+The system has been exercised on three non-trivial AI repositories:
 
 | Repository | Files | Lines of code | Audited state |
 |---|---:|---:|---|
@@ -276,28 +207,7 @@ The system has been exercised against three non-trivial AI repositories:
 | SalesBoost | 1,424 | 167,189 | MVP |
 | **Total** | **1,988** | **219,977** | — |
 
-The purpose of these runs is to test repository-scale behavior rather than toy prompt examples.
-
----
-
-## Architecture
-
-```mermaid
-flowchart TD
-    I["Repository import"] --> A["Audit"]
-    A --> G["Gap model"]
-    G --> P["Upgrade plan"]
-    P --> X["Sandbox execution"]
-    X --> O["Observe + Trace"]
-    O --> V["Verification + Agent Eval"]
-    V -->|pass| E["Evidence + Version"]
-    V -->|fail| F["Failure classification"]
-    F --> R["Retry / Replan / Rollback / HITL"]
-    R --> X
-    E --> A2["Re-audit"]
-```
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture contract and trust boundary.
+These runs are intended to test repository-scale behavior rather than toy prompt examples.
 
 ---
 
@@ -306,27 +216,26 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture contract and trust b
 ```text
 ai-engineering-project-os/
 ├── apps/
-│   ├── api/                     # FastAPI application
-│   └── web/                     # Next.js / React UI
+│   ├── api/                  # FastAPI backend
+│   └── web/                  # Next.js / React UI
 ├── services/
-│   ├── agent_harness/           # Harness control plane
-│   ├── project-auditor/         # Repository audit
-│   ├── upgrade-planner/         # Gap → upgrade plan
-│   ├── engineering-mentor/      # Engineering explanation
-│   ├── execution-runtime/       # Repository execution
-│   ├── verification-engine/     # Completion verification
-│   └── interview-engine/        # Code-grounded interview
+│   ├── agent_harness/        # Long-horizon runtime control
+│   ├── project-auditor/      # Repository audit
+│   ├── upgrade-planner/      # Gap → task plan
+│   ├── execution-runtime/    # Code and tool execution
+│   ├── verification-engine/  # Completion checks
+│   └── interview-engine/     # Code-grounded interview
 ├── packages/
-│   ├── agent_harness/           # Tracing / context / eval / recovery / sandbox / memory
-│   ├── contracts/               # Shared models
-│   ├── database/                # Persistence
-│   ├── maturity-model/          # Repository maturity model
-│   ├── evidence-model/          # Evidence model
-│   └── project-intelligence/    # Repository understanding
-├── alembic/                     # Database migrations
-├── tests/                       # Backend + harness regression tests
-├── docs/                        # Validation and engineering docs
-└── workspaces/                  # Isolated project workspaces
+│   ├── agent_harness/        # tracing / context / eval / recovery / sandbox
+│   ├── contracts/
+│   ├── database/
+│   ├── maturity-model/
+│   ├── evidence-model/
+│   └── project-intelligence/
+├── alembic/
+├── tests/
+├── docs/
+└── workspaces/
 ```
 
 ---
@@ -338,7 +247,11 @@ git clone https://github.com/Benjamindaoson/ai-engineering-project-os.git
 cd ai-engineering-project-os
 
 pip install -r requirements.txt
+```
 
+Install the web app:
+
+```bash
 cd apps/web
 npm install
 cd ../..
@@ -351,14 +264,14 @@ cd apps/api
 python -m uvicorn main:app --reload
 ```
 
-Start the web application in another terminal:
+Start the web app in another terminal:
 
 ```bash
 cd apps/web
 npm run dev
 ```
 
-Open:
+Then open:
 
 ```text
 http://localhost:3000
@@ -366,15 +279,15 @@ http://localhost:3000
 
 ---
 
-## Verification
+## Run the checks
 
-Backend tests:
+Backend:
 
 ```bash
 pytest tests/ -v
 ```
 
-Frontend checks:
+Frontend:
 
 ```bash
 cd apps/web
@@ -385,43 +298,19 @@ npm run test:e2e
 
 ---
 
-## Selected API surface
-
-```text
-POST /api/projects/import
-POST /api/projects/{id}/audit
-POST /api/projects/{id}/plan
-
-POST /api/tasks/{id}/execute
-POST /api/executions/{id}/verify
-
-GET  /api/projects/{id}/evidence
-GET  /api/projects/{id}/versions
-
-POST /api/projects/{id}/interview
-POST /api/interviews/{id}/answers
-
-POST /api/projects/{id}/experiments
-POST /api/experiments/{id}/runs
-```
-
----
-
 ## Tech stack
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy
 - **Frontend:** Next.js 14, React, TypeScript, Tailwind CSS
 - **Persistence:** SQLite + Alembic
 - **Testing:** pytest, Playwright
-- **Agent reliability:** tracing, evaluation gates, context drift checks, recovery policies, sandbox / HITL, harness ablation
+- **Agent runtime:** tracing, context management, verification, recovery, sandbox, HITL, evaluation
 
 ---
 
 ## Design principle
 
-The central idea of this repository is simple:
-
-> **An autonomous engineering agent should not be trusted because it can generate code. It should be trusted only when its execution is observable, its failures are recoverable, and its completion claims are backed by verifiable evidence.**
+> **Do not trust an engineering agent because it can write code. Trust it only when the work is observable, failures are recoverable, and completion is backed by evidence.**
 
 ---
 
