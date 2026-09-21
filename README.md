@@ -1,3 +1,6 @@
+> **Portfolio status / 作品集状态：FLAGSHIP · Agent Systems**
+> Canonical independent flagship repository; cross-listed with Engineering Tools Lab.
+
 # AI Engineering Project OS
 
 **版本: v1.0.0**
