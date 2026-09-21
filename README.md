@@ -1,162 +1,429 @@
-> **Portfolio status / 作品集状态：FLAGSHIP · Agent Systems**
-> Canonical independent flagship repository; cross-listed with Engineering Tools Lab.
-
 # AI Engineering Project OS
 
-**版本: v1.0.0**
-**状态: CORE EXIT GATE PASSED**
+**A long-horizon Agent Harness for autonomously auditing, upgrading, verifying, and recovering real AI/LLM codebases.**
 
-> 把用户的 AI 项目从当前状态一步步推进到生产级。
+> 给它一个真实代码仓库，它不会只“写一段代码然后宣布完成”，而是持续执行：
+> **Audit → Gap → Plan → Execute → Verify → Recover / Replan → Evidence → Re-Audit**，
+> 直到工程结果被真实测试、构建产物和执行证据验证。
 
-## 一句话定位
+**Status:** v1.0.0 · Core exit gate passed  
+**Focus:** Agent Harness · Long-Horizon Execution · Verification · Recovery · Sandbox · Tracing · Evaluation
 
-**AI 工程升级教练**：不是课程平台，不是普通代码助手，而是把普通 AI 项目升级成有工程深度、有验证证据、能经得住技术面试的项目。
+---
 
-## 核心价值链
+## What is this?
 
-```
-用户项目
-  ↓
-自动审计 → 判断成熟度
-  ↓
-识别缺口 → 生成升级任务
-  ↓
-AI 执行 → 真实代码改造
-  ↓
-自动测试 → 验证门验收
-  ↓
-保存证据 → 版本记录
-  ↓
-技术面试 → 连续追问
-  ↓
-形成可验证的工程能力档案
-```
+AI Engineering Project OS is an **agent runtime / engineering control plane for repository-level tasks**.
 
-## 六大核心智能体
+It is designed for a problem that ordinary coding assistants do not solve well:
 
-| 智能体 | 职责 |
-|--------|------|
-| **项目审计** | 读取代码，判断成熟度，识别缺口 |
-| **升级规划** | 根据缺口生成升级任务，决定优先级 |
-| **工程导师** | 解释为什么需要这个改动 |
-| **执行运行** | 安全修改代码，执行命令，运行测试 |
-| **验证引擎** | 检查真实证据，判断任务是否完成 |
-| **面试引擎** | 基于真实代码进行技术追问 |
+> **How can an AI agent work on a real repository for a long time, make multiple coordinated changes, know whether the work is actually correct, recover when something fails, and leave enough evidence for a human to trust the result?**
 
-## 成熟度模型
+You provide an AI/LLM repository and an engineering objective. The system:
 
-| 级别 | 证据要求 |
-|------|----------|
-| **想法** | 问题、用户、输入、输出、数据来源、核心技术 |
-| **演示版** | 核心流程可端到端运行 |
-| **MVP** | 数据持久化、错误处理、基本测试 |
-| **准生产** | 评测体系、安全、监控、日志、链路追踪 |
-| **生产级** | 真实运行环境、容量规划、故障恢复 |
+1. **Audits the repository** and builds an evidence-backed view of its current state.
+2. **Finds engineering gaps** instead of relying on a single prompt.
+3. **Plans bounded upgrade tasks** with explicit completion criteria.
+4. **Executes changes inside a controlled workspace / sandbox.**
+5. **Observes tool results, tests, builds, and intermediate state.**
+6. **Verifies completion using real evidence rather than model self-report.**
+7. **Classifies failures and retries, replans, rolls back, or requests human approval.**
+8. **Persists traces, evaluation results, evidence, and version history.**
+9. **Re-audits the repository** to measure what actually improved.
 
-## 快速开始
+In short:
 
-```bash
-# 1. 克隆仓库
-git clone https://github.com/Benjamindaoson/ai-engineering-project-os.git
-cd ai-engineering-project-os
-
-# 2. 安装依赖
-pip install -r requirements.txt
-cd apps/web && npm install && cd ../..
-
-# 3. 启动后端
-cd apps/api && python -m uvicorn main:app --reload
-
-# 4. 启动前端 (另一个终端)
-cd apps/web && npm run dev
-```
-
-访问 `http://localhost:3000` 开始使用。
-
-## 质量门验证
-
-```bash
-# 后端测试
-pytest tests/ -v
-
-# 前端类型检查
-cd apps/web && npm run typecheck
-
-# 前端构建
-npm run build
-
-# Playwright E2E
-npm run test:e2e
+```text
+Real Repository
+      │
+      ▼
+   Audit
+      │
+      ▼
+ Gap Analysis
+      │
+      ▼
+ Upgrade Plan
+      │
+      ▼
+ Agent Execution ───────────────┐
+      │                         │
+      ▼                         │
+ Observe / Trace                │
+      │                         │
+      ▼                         │
+   Verify                       │
+   │    │                       │
+ pass   fail                    │
+   │    │                       │
+   │    ▼                       │
+   │  Classify Failure          │
+   │    │                       │
+   │    ├─ Retry                │
+   │    ├─ Replan ──────────────┘
+   │    ├─ Rollback
+   │    └─ HITL Approval
+   ▼
+Evidence + Version
+      │
+      ▼
+   Re-Audit
 ```
 
-**当前状态**: 46 passed | PASS | SUCCESS | 2 passed
+---
 
-## 项目结构
+## Why this is not just another coding agent
 
-```
-ai-engineering-project-os/
-├── apps/
-│   ├── api/              # FastAPI 后端
-│   │   └── main.py       # 40+ API 端点
-│   └── web/              # Next.js 14 前端
-│       ├── app/          # 6个核心页面
-│       └── tests/e2e/    # Playwright E2E 测试
-├── services/              # 六大核心智能体
-│   ├── project-auditor/   # 项目审计
-│   ├── upgrade-planner/   # 升级规划
-│   ├── engineering-mentor/ # 工程导师
-│   ├── execution-runtime/ # 执行运行
-│   ├── verification-engine/ # 验证引擎
-│   └── interview-engine/  # 面试引擎
-├── packages/              # 核心包
-│   ├── contracts/         # 数据模型
-│   ├── maturity-model/   # 成熟度模型
-│   ├── evidence-model/   # 证据模型
-│   └── project-intelligence/ # 项目理解
-├── packages/database/     # 数据库层 (Alembic)
-├── docs/                  # 文档
-│   └── FINAL_PRODUCT_VALIDATION.md  # 完整验证报告
-├── tests/                 # 后端测试
-└── workspaces/           # 项目隔离工作区
+A normal coding agent is often optimized for:
+
+```text
+Prompt → Generate Patch → Run Something → Answer "Done"
 ```
 
-## 已验证的三个真实项目
+This project is built around a stricter contract:
 
-| 项目 | 文件数 | 代码行数 | 成熟度 |
-|------|--------|----------|--------|
+```text
+A model proposal is NOT completion evidence.
+
+Completion must be supported by:
+tests + builds + artifacts + traces + persisted execution evidence
+```
+
+| Problem | Typical coding assistant | AI Engineering Project OS |
+|---|---|---|
+| Long-running work | Prompt/session oriented | Persistent task and execution state |
+| Multi-step repository changes | Ad-hoc | Explicit plan → task → execution lifecycle |
+| Context growth | Mostly implicit | Token budget, compression, retention and drift checks |
+| Tool execution | Broad / prompt-driven | Controlled workspace and sandbox policy |
+| Failure handling | Retry the prompt | Failure taxonomy + recovery policy |
+| Risky actions | Weak boundary | HITL approval path |
+| “Is it finished?” | Model judgment | Deterministic verification + agent-level eval |
+| Debugging the agent | Conversation logs | Structured tracing and runtime metrics |
+| Proving the harness matters | Rare | Controlled harness ablations |
+| Auditability | Limited | Evidence and version persistence |
+
+---
+
+## Core Agent Harness
+
+The merged Agent Harness runtime provides the control layer for long-horizon execution.
+
+### 1. Trace every agent run
+
+The runtime records structured spans and execution metrics so a failed task can be reconstructed instead of guessed at.
+
+Tracked signals include:
+
+- agent / tool spans
+- tool calls and tool errors
+- retries
+- token usage
+- latency
+- cost metadata
+- execution summaries
+
+### 2. Manage long-horizon context
+
+Repository-scale tasks accumulate too much context for a single prompt.
+
+The context layer provides:
+
+- explicit context budget
+- priority and pinned context
+- compression of oversized items
+- stale-context detection
+- dropped-context reporting
+- required-fact retention checks
+- context drift metrics
+
+### 3. Verify instead of trusting self-report
+
+A task is not complete because an LLM says it is complete.
+
+The evaluation layer derives agent-level metrics from execution traces and verification results, including:
+
+- task success
+- verification pass rate
+- false-completion rate
+- tool-error rate
+- retry rate
+- recovery success rate
+- context drift
+- token / latency / cost signals
+
+### 4. Recover from failures
+
+Failures are classified into structured failure types and mapped to explicit recovery actions.
+
+The runtime can decide whether to:
+
+```text
+RETRY
+REPLAN
+ROLLBACK
+REQUEST APPROVAL
+ABORT
+```
+
+This turns recovery from a prompt trick into part of the runtime.
+
+### 5. Sandbox high-risk execution
+
+Repository modification is constrained by an execution boundary.
+
+The sandbox layer can enforce:
+
+- workspace-root restrictions
+- file-operation authorization
+- command authorization
+- network policy
+- changed-file limits
+- risk classification
+- human approval for high-risk actions
+
+### 6. Evaluate the harness itself
+
+The project includes controlled ablation support so reliability improvements can be tested instead of assumed.
+
+Canonical variants include:
+
+- full harness
+- no verification
+- no persistent state
+- no context compression
+- no recovery
+- no sandbox / HITL
+
+This makes the system not only an Agent runtime, but also an **evaluation platform for Agent reliability**.
+
+---
+
+## End-to-end engineering lifecycle
+
+The repository-level workflow is:
+
+```text
+Audit
+  ↓
+Gap
+  ↓
+Plan
+  ↓
+Task
+  ↓
+Execute
+  ↓
+Observe
+  ↓
+Verify
+  ↓
+Evidence
+  ↓
+Version
+  ↓
+Re-Audit
+```
+
+The system separates four things that are often incorrectly collapsed together:
+
+- **Proposal** — what the model wants to do
+- **Execution** — what actually happened
+- **Verification** — whether the result satisfies the acceptance criteria
+- **Evidence** — why the system is allowed to call the task complete
+
+That separation is the core design principle of the project.
+
+---
+
+## System components
+
+| Component | Responsibility |
+|---|---|
+| **Project Auditor** | Understand repository state and produce evidence-backed maturity findings |
+| **Upgrade Planner** | Convert gaps into bounded, testable engineering tasks |
+| **Execution Runtime** | Modify code and run tools inside the controlled workspace |
+| **Agent Harness** | Coordinate tracing, context, recovery, sandbox, HITL and evaluation |
+| **Verification Engine** | Verify files, commands, tests and build results |
+| **Evidence / Version Layer** | Persist why a task passed and what changed |
+| **Interview Engine** | Generate technical questions grounded in the actual repository |
+
+---
+
+## Repository maturity model
+
+The project can audit repositories against an engineering maturity ladder:
+
+| Level | Typical evidence |
+|---|---|
+| **Idea** | Problem, user, inputs, outputs, data source, core technical direction |
+| **Demo** | Core workflow runs end-to-end |
+| **MVP** | Persistence, error handling, basic tests |
+| **Pre-production** | Evaluation, security, observability, logging and tracing |
+| **Production** | Real deployment constraints, capacity planning and failure recovery |
+
+The maturity score is useful, but it is **not** the runtime's source of truth. Concrete repository evidence remains the source of truth.
+
+---
+
+## Real-repository validation
+
+The system has been exercised against three non-trivial AI repositories:
+
+| Repository | Files | Lines of code | Audited state |
+|---|---:|---:|---|
 | AIEduRAG | 186 | 14,437 | MVP |
 | enterprise-data-agent | 378 | 38,351 | MVP |
 | SalesBoost | 1,424 | 167,189 | MVP |
+| **Total** | **1,988** | **219,977** | — |
 
-## API 端点 (40+)
+The purpose of these runs is to test repository-scale behavior rather than toy prompt examples.
 
-```bash
-# 项目管理
-POST   /api/projects/import          # 导入项目
-POST   /api/projects/{id}/audit     # 项目审计
-POST   /api/projects/{id}/plan     # 生成升级计划
-GET    /api/projects/{id}/evidence # 获取证据
-GET    /api/projects/{id}/versions # 获取版本
+---
 
-# 任务执行
-POST   /api/tasks/{id}/execute     # 执行任务
-POST   /api/executions/{id}/verify  # 验证结果
+## Architecture
 
-# 面试
-POST   /api/projects/{id}/interview # 开始面试
-POST   /api/interviews/{id}/answers # 提交回答
-
-# 实验
-POST   /api/projects/{id}/experiments
-POST   /api/experiments/{id}/runs
+```mermaid
+flowchart TD
+    I["Repository import"] --> A["Audit"]
+    A --> G["Gap model"]
+    G --> P["Upgrade plan"]
+    P --> X["Sandbox execution"]
+    X --> O["Observe + Trace"]
+    O --> V["Verification + Agent Eval"]
+    V -->|pass| E["Evidence + Version"]
+    V -->|fail| F["Failure classification"]
+    F --> R["Retry / Replan / Rollback / HITL"]
+    R --> X
+    E --> A2["Re-audit"]
 ```
 
-## 核心技术栈
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the architecture contract and trust boundary.
 
-- **后端**: Python 3.12, FastAPI, SQLAlchemy, SQLite
-- **前端**: Next.js 14, React, TypeScript, TailwindCSS
-- **测试**: pytest, Playwright
-- **数据库**: SQLite + Alembic (18 tables)
+---
+
+## Project structure
+
+```text
+ai-engineering-project-os/
+├── apps/
+│   ├── api/                     # FastAPI application
+│   └── web/                     # Next.js / React UI
+├── services/
+│   ├── agent_harness/           # Harness control plane
+│   ├── project-auditor/         # Repository audit
+│   ├── upgrade-planner/         # Gap → upgrade plan
+│   ├── engineering-mentor/      # Engineering explanation
+│   ├── execution-runtime/       # Repository execution
+│   ├── verification-engine/     # Completion verification
+│   └── interview-engine/        # Code-grounded interview
+├── packages/
+│   ├── agent_harness/           # Tracing / context / eval / recovery / sandbox / memory
+│   ├── contracts/               # Shared models
+│   ├── database/                # Persistence
+│   ├── maturity-model/          # Repository maturity model
+│   ├── evidence-model/          # Evidence model
+│   └── project-intelligence/    # Repository understanding
+├── alembic/                     # Database migrations
+├── tests/                       # Backend + harness regression tests
+├── docs/                        # Validation and engineering docs
+└── workspaces/                  # Isolated project workspaces
+```
+
+---
+
+## Quick start
+
+```bash
+git clone https://github.com/Benjamindaoson/ai-engineering-project-os.git
+cd ai-engineering-project-os
+
+pip install -r requirements.txt
+
+cd apps/web
+npm install
+cd ../..
+```
+
+Start the API:
+
+```bash
+cd apps/api
+python -m uvicorn main:app --reload
+```
+
+Start the web application in another terminal:
+
+```bash
+cd apps/web
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+---
+
+## Verification
+
+Backend tests:
+
+```bash
+pytest tests/ -v
+```
+
+Frontend checks:
+
+```bash
+cd apps/web
+npm run typecheck
+npm run build
+npm run test:e2e
+```
+
+---
+
+## Selected API surface
+
+```text
+POST /api/projects/import
+POST /api/projects/{id}/audit
+POST /api/projects/{id}/plan
+
+POST /api/tasks/{id}/execute
+POST /api/executions/{id}/verify
+
+GET  /api/projects/{id}/evidence
+GET  /api/projects/{id}/versions
+
+POST /api/projects/{id}/interview
+POST /api/interviews/{id}/answers
+
+POST /api/projects/{id}/experiments
+POST /api/experiments/{id}/runs
+```
+
+---
+
+## Tech stack
+
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy
+- **Frontend:** Next.js 14, React, TypeScript, Tailwind CSS
+- **Persistence:** SQLite + Alembic
+- **Testing:** pytest, Playwright
+- **Agent reliability:** tracing, evaluation gates, context drift checks, recovery policies, sandbox / HITL, harness ablation
+
+---
+
+## Design principle
+
+The central idea of this repository is simple:
+
+> **An autonomous engineering agent should not be trusted because it can generate code. It should be trusted only when its execution is observable, its failures are recoverable, and its completion claims are backed by verifiable evidence.**
+
+---
 
 ## License
 
