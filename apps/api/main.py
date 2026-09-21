@@ -42,6 +42,7 @@ from services.engineering_mentor import EngineeringMentor
 from services.execution_runtime import ExecutionConfig, ExecutionRuntime
 from services.interview_engine import InterviewEngine
 from services.project_auditor import ProjectAuditor
+from services.project_lab_assessment import ProjectLabAssessmentService, ProjectLabCriterion
 from services.repo_import import RepoImportService
 from services.upgrade_planner import UpgradePlanner
 from services.verification_engine import VerificationEngine
@@ -82,6 +83,7 @@ auditor = ProjectAuditor()
 planner = UpgradePlanner()
 mentor = EngineeringMentor()
 verifier = VerificationEngine()
+project_lab_assessor = ProjectLabAssessmentService(verifier)
 
 
 # ============================================================================
@@ -105,6 +107,17 @@ class TaskExecuteRequest(BaseModel):
 class InterviewAnswerRequest(BaseModel):
     question_id: str
     answer: str
+
+
+class ProjectLabCriterionRequest(BaseModel):
+    criterion: str
+    evidence_type: str
+    verification_method: str = ""
+
+
+class ProjectLabAssessmentRequest(BaseModel):
+    skill_ids: list[str] = []
+    criteria: list[ProjectLabCriterionRequest] = []
 
 
 # ============================================================================
@@ -317,6 +330,50 @@ async def audit_project(project_id: str, db: AsyncSession = Depends(get_db)):
         "gaps": gaps_data,
         "raw_observations": result.get("raw_observations", []),
     }
+
+
+@app.post("/api/project-lab/projects/{project_id}/assess")
+async def assess_project_for_learning(
+    project_id: str,
+    request: ProjectLabAssessmentRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Run read-only project verification for an external learning system."""
+    project_repo = ProjectRepository(db)
+    snapshot_repo = SnapshotRepository(db)
+
+    project = await project_repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if not project.local_path or not os.path.exists(project.local_path):
+        raise HTTPException(status_code=400, detail="Project workspace not found")
+
+    criteria = [
+        ProjectLabCriterion(
+            criterion=item.criterion,
+            evidence_type=item.evidence_type,
+            verification_method=item.verification_method,
+        )
+        for item in request.criteria
+    ]
+
+    try:
+        result = project_lab_assessor.assess(
+            project_id=project_id,
+            project_path=project.local_path,
+            skill_ids=request.skill_ids,
+            criteria=criteria or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    snapshot = await snapshot_repo.get_latest(project_id)
+    result["source_snapshot"] = {
+        "snapshot_id": snapshot.id if snapshot else None,
+        "commit_sha": snapshot.commit_sha if snapshot else None,
+        "branch": snapshot.branch if snapshot else None,
+    }
+    return result
 
 
 @app.get("/api/projects/{project_id}/audit")
