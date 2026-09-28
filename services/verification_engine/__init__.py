@@ -8,6 +8,7 @@ not by reading README, but by checking real evidence.
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -424,7 +425,7 @@ class VerificationEngine:
         if has_pytest:
             try:
                 result = subprocess.run(
-                    ["pytest", "--collect-only", "-q"],
+                    [sys.executable, "-m", "pytest", "--collect-only", "-q"],
                     cwd=project_path,
                     capture_output=True,
                     text=True,
